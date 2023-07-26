@@ -317,6 +317,15 @@ Output human-readable logs to a given file.
 
 Output JSON logs to a given file.
 
+### -l, --log-filter
+
+|             |                                |
+| ----------- | ------------------------------ |
+| Type        | <code>string-array</code>      |
+| Environment | <code>$CODER_LOG_FILTER</code> |
+
+Filter debug logs by matching against a given regex. Use .\* to match all debug logs.
+
 ### --max-token-lifetime
 
 |             |                                               |
@@ -947,16 +956,6 @@ Enables trace exporting to Honeycomb.io using the provided API Key.
 | Default     | <code>false</code>               |
 
 Periodically check for new releases of Coder and inform the owner. The check is performed once per day.
-
-### -v, --verbose
-
-|             |                                            |
-| ----------- | ------------------------------------------ |
-| Type        | <code>bool</code>                          |
-| Environment | <code>$CODER_VERBOSE</code>                |
-| YAML        | <code>introspection.logging.verbose</code> |
-
-Output debug-level logs.
 
 ### --wildcard-access-url
 
