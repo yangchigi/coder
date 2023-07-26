@@ -69,7 +69,7 @@ The directory to cache temporary files. If unspecified and $CACHE_DIRECTORY is s
 | Environment | <code>$CODER_TRACE_LOGS</code>                 |
 | YAML        | <code>introspection.tracing.captureLogs</code> |
 
-Enables capturing of logs as events in traces. This is useful for debugging, but may result in a very large amount of events being sent to the tracing backend which may incur significant costs. If the verbose flag was supplied, debug-level logs will be included.
+Enables capturing of logs as events in traces. This is useful for debugging, but may result in a very large amount of events being sent to the tracing backend which may incur significant costs.
 
 ### -c, --config
 

@@ -107,8 +107,7 @@ Use a YAML configuration file when your server launch become unwieldy.
       --trace-logs bool, $CODER_TRACE_LOGS
           Enables capturing of logs as events in traces. This is useful for
           debugging, but may result in a very large amount of events being sent
-          to the tracing backend which may incur significant costs. If the
-          verbose flag was supplied, debug-level logs will be included.
+          to the tracing backend which may incur significant costs.
 
       --trace bool, $CODER_TRACE_ENABLE
           Whether application tracing data is collected. It exports to a backend
