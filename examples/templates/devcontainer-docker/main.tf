@@ -206,6 +206,8 @@ data "coder_parameter" "custom_repo_url" {
 
 resource "docker_container" "workspace" {
   count = data.coder_workspace.me.start_count
+  # Find the latest version here:
+  # https://github.com/coder/envbuilder/tags
   image = "ghcr.io/coder/envbuilder:0.1.3"
   # Uses lower() to avoid Docker restriction on container names.
   name = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
