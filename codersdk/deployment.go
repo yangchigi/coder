@@ -1846,14 +1846,9 @@ const (
 	// https://github.com/coder/coder/milestone/19
 	ExperimentWorkspaceActions Experiment = "workspace_actions"
 
-	// ExperimentTailnetHACoordinator downgrades to the haCoordinator instead
-	// of PGCoord.  Should only be used if we see issues in prod with PGCoord
-	// which is now the default.
-	ExperimentTailnetHACoordinator Experiment = "tailnet_ha_coordinator"
-
-	// ExperimentConvertToOIDC enables users to convert from password to
-	// oidc.
-	ExperimentConvertToOIDC Experiment = "convert-to-oidc"
+	// ExperimentTailnetPGCoordinator enables the PGCoord in favor of the pubsub-
+	// only Coordinator
+	ExperimentTailnetPGCoordinator Experiment = "tailnet_pg_coordinator"
 
 	// ExperimentSingleTailnet replaces workspace connections inside coderd to
 	// all use a single tailnet, instead of the previous behavior of creating a
@@ -1873,8 +1868,8 @@ const (
 	//   quiet hours instead of max_ttl.
 	ExperimentTemplateRestartRequirement Experiment = "template_restart_requirement"
 
-	// Insights page
-	ExperimentTemplateInsightsPage Experiment = "template_insights_page"
+	// Deployment health page
+	ExperimentDeploymentHealthPage Experiment = "deployment_health_page"
 
 	// Add new experiments here!
 	// ExperimentExample Experiment = "example"
@@ -1885,7 +1880,7 @@ const (
 // Experiments that are not ready for consumption by all users should
 // not be included here and will be essentially hidden.
 var ExperimentsAll = Experiments{
-	ExperimentTemplateInsightsPage,
+	ExperimentDeploymentHealthPage,
 }
 
 // Experiments is a list of experiments that are enabled for the deployment.

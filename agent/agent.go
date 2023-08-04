@@ -79,12 +79,14 @@ type Client interface {
 	PostAppHealth(ctx context.Context, req agentsdk.PostAppHealthsRequest) error
 	PostStartup(ctx context.Context, req agentsdk.PostStartupRequest) error
 	PostMetadata(ctx context.Context, key string, req agentsdk.PostMetadataRequest) error
-	PatchStartupLogs(ctx context.Context, req agentsdk.PatchStartupLogs) error
+	PatchLogs(ctx context.Context, req agentsdk.PatchLogs) error
 	GetServiceBanner(ctx context.Context) (codersdk.ServiceBannerConfig, error)
 }
 
 type Agent interface {
 	HTTPDebug() http.Handler
+	// TailnetConn may be nil.
+	TailnetConn() *tailnet.Conn
 	io.Closer
 }
 
@@ -200,6 +202,10 @@ type agent struct {
 	metrics            *agentMetrics
 }
 
+func (a *agent) TailnetConn() *tailnet.Conn {
+	return a.network
+}
+
 func (a *agent) init(ctx context.Context) {
 	sshSrv, err := agentssh.NewServer(ctx, a.logger.Named("ssh-server"), a.prometheusRegistry, a.filesystem, a.sshMaxTimeout, "")
 	if err != nil {
@@ -230,7 +236,9 @@ func (a *agent) runLoop(ctx context.Context) {
 		if err == nil {
 			continue
 		}
-		if errors.Is(err, context.Canceled) {
+		if ctx.Err() != nil {
+			// Context canceled errors may come from websocket pings, so we
+			// don't want to use `errors.Is(err, context.Canceled)` here.
 			return
 		}
 		if a.isClosed() {
@@ -1006,7 +1014,7 @@ func (a *agent) runScript(ctx context.Context, lifecycle, script string) (err er
 
 	var stdout, stderr io.Writer = fileWriter, fileWriter
 	if lifecycle == "startup" {
-		send, flushAndClose := agentsdk.StartupLogsSender(a.client.PatchStartupLogs, logger)
+		send, flushAndClose := agentsdk.LogsSender(a.client.PatchLogs, logger)
 		// If ctx is canceled here (or in a writer below), we may be
 		// discarding logs, but that's okay because we're shutting down
 		// anyway. We could consider creating a new context here if we
@@ -1017,9 +1025,9 @@ func (a *agent) runScript(ctx context.Context, lifecycle, script string) (err er
 			}
 		}()
 
-		infoW := agentsdk.StartupLogsWriter(ctx, send, codersdk.LogLevelInfo)
+		infoW := agentsdk.StartupLogsWriter(ctx, send, codersdk.WorkspaceAgentLogSourceStartupScript, codersdk.LogLevelInfo)
 		defer infoW.Close()
-		errW := agentsdk.StartupLogsWriter(ctx, send, codersdk.LogLevelError)
+		errW := agentsdk.StartupLogsWriter(ctx, send, codersdk.WorkspaceAgentLogSourceStartupScript, codersdk.LogLevelError)
 		defer errW.Close()
 
 		stdout = io.MultiWriter(fileWriter, infoW)
