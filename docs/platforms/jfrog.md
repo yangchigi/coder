@@ -62,7 +62,7 @@ provider "artifactory" {
 }
 ```
 
-When pushing the template, you can pass in the variables using the `-V` flag:
+When pushing the template, you can pass in the variables using the `--var` flag:
 
 ```sh
 coder templates push --var 'jfrog_url=https://YYY.jfrog.io' --var 'artifactory_access_token=XXX'
@@ -74,7 +74,7 @@ coder templates push --var 'jfrog_url=https://YYY.jfrog.io' --var 'artifactory_a
 we'll focus on its ability to configure package managers, as that's the relevant
 functionality for most developers.
 
-The generic method of installing the JFrog CLI is the following command:
+Most users should be able to install `jf` by running the following command:
 
 ```sh
 curl -fL https://install-cli.jfrog.io | sh
@@ -132,7 +132,7 @@ Default:                        true
 
 ## Installing the JFrog VS Code Extension
 
-You can install the JFrog VS Code extension into workspaces automatically
+You can install the JFrog VS Code extension into workspaces
 by inserting the following lines into your `startup_script`:
 
 ```sh
