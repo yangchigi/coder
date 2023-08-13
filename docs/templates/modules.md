@@ -87,3 +87,25 @@ coder:
       subPath: .git-credentials
       readOnly: true
 ```
+
+## Artifactory
+
+With [Terraform Module Sources](https://developer.hashicorp.com/terraform/language/modules/sources), you can reference template resources stored in JFrog Artifactory. You
+can even simplify the entire Coder template to a single `module` block. For example:
+
+```hcl
+module "vpc" {
+  source = "https://acme.jfrog.io/artifactory/templates/docker"
+}
+```
+
+With this approach, you can:
+
+* Easily share templates across multiple Coder instances
+* Store templates larger than 1MB
+* Apply JFrog platform security policies to your templates
+
+----
+
+* TODO: add example template
+
