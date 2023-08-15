@@ -5,7 +5,7 @@ Use Coder and JFrog together to secure your development environments without dis
 This guide will demonstrate how to use JFrog Artifactory as a package registry
 within a workspace. We'll use Docker as the underlying compute. But, these concepts apply to any compute platform.
 
-The full example template can be found [here](https://github.com/coder/coder/tree/main/examples/templates/jfrog-docker).
+The full example template can be found [here](https://github.com/coder/coder/tree/main/examples/templates/jfrog/docker).
 
 ## Requirements
 
@@ -228,5 +228,5 @@ supported by Artifactory. See the [JFrog documentation](https://jfrog.com/help/r
 
 ## More reading
 
-- See the full example template [here](https://github.com/coder/coder/tree/main/examples/templates/jfrog-docker).
+- See the full example template [here](https://github.com/coder/coder/tree/main/examples/templates/jfrog/docker).
 - To serve extensions from your own VS Code Marketplace, check out [code-marketplace](https://github.com/coder/code-marketplace#artifactory-storage).
