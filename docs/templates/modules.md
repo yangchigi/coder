@@ -87,3 +87,45 @@ coder:
       subPath: .git-credentials
       readOnly: true
 ```
+
+## Artifactory
+
+With [Terraform Module Sources](https://developer.hashicorp.com/terraform/language/modules/sources), you can reference template resources stored in JFrog Artifactory. You
+can even simplify the entire Coder-stored template to a single `module` block. For example:
+
+```hcl
+module "docker" {
+  source = "https://acme.jfrog.io/artifactory/templates/docker"
+}
+```
+
+With this approach, you can:
+
+* Easily share templates across multiple Coder instances
+* Store templates larger than 1MB
+* Apply JFrog platform security policies to your templates
+
+
+### Push your first module
+
+1. To get started, set up either a virtual or local repository in Artifactory. The
+rest of this guide will assume the repository is named `tf` .
+1. Then, authenticate `terraform` with your artifactory instance
+using `terraform login abc.jfrog.io`. Follow the prompts, then run `jf tfc --global`.
+1. Upload the module to Artifactory using:
+  ```shell
+  jf tf p --namespace=main --provider=docker --tag=v0.0.1
+  ```
+
+
+
+
+You can learn more about JFrog's Terraform Registry support [here](https://jfrog.com/help/r/jfrog-artifactory-documentation/terraform-registry).
+
+----
+
+TODO:
+* add example template
+* demonstrate parameters 
+* explain authentication
+
