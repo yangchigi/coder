@@ -16,11 +16,9 @@ terraform {
 }
 
 locals {
-  # if the jfrog username is same as the coder username, you can use the following
-  # artifactory_username = data.coder_workspace.me.owner
-  # if the username is same as email, you can use the following
-  # artifactory_username = urlencode(data.coder_workspace.me.owner_email)
-  artifactory_username = data.coder_workspace.me.owner
+  # take care to use owner_email instead of owner because users can change
+  # their username.
+  artifactory_username = urlencode(data.coder_workspace.me.owner_email)
   artifactory_repository_keys = {
     "npm"    = "npm"
     "python" = "python"
@@ -131,7 +129,7 @@ resource "docker_image" "main" {
     }
   }
   triggers = {
-    dir_sha1 = sha1(join("", [for f in fileset(path.module, "build/*") : filesha1(f)]))
+    dir_sha1 = sha1(join("", [for f in fileset(path.module, "build/*") : filesha1("${path.module}/${f}")]))
   }
 }
 
