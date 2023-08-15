@@ -74,7 +74,7 @@ coder templates push --var 'jfrog_host=YYY.jfrog.io' --var 'artifactory_access_t
 we'll focus on its ability to configure package managers, as that's the relevant
 functionality for most developers.
 
-The generic method of installing the JFrog CLI is the following command:
+Most users should be able to install `jf` by running the following command:
 
 ```sh
 curl -fL https://install-cli.jfrog.io | sh
@@ -165,7 +165,7 @@ Default:                        true
 
 ## Installing the JFrog VS Code Extension
 
-You can install the JFrog VS Code extension into workspaces automatically
+You can install the JFrog VS Code extension into workspaces
 by inserting the following lines into your `startup_script`:
 
 ```sh
