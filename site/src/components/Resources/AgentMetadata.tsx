@@ -1,11 +1,13 @@
 import makeStyles from "@mui/styles/makeStyles"
 import { watchAgentMetadata } from "api/api"
+import Popover from "@mui/material/Popover"
 import { WorkspaceAgent, WorkspaceAgentMetadata } from "api/typesGenerated"
 import { Stack } from "components/Stack/Stack"
 import dayjs from "dayjs"
 import {
   createContext,
   FC,
+  Ref,
   useContext,
   useEffect,
   useRef,
@@ -21,6 +23,42 @@ type ItemStatus = "stale" | "valid" | "loading"
 
 export const WatchAgentMetadataContext = createContext(watchAgentMetadata)
 
+const MetadataTerminalPopover: FC<{
+  id: string
+  body: string
+}> = ({ id, body }) => {
+  const styles = useStyles()
+
+  const ref = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <div
+        className={styles.inlineCommand}
+        ref={ref}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        View Terminal
+      </div>
+
+      <Popover
+        id={id}
+        open={open}
+        anchorEl={ref.current}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "left",
+        }}
+        classes={{ paper: styles.popover }}
+      >
+        <Box p={1}>{body}</Box>
+      </Popover>
+    </>
+  )
+}
+
 const MetadataItem: FC<{ item: WorkspaceAgentMetadata }> = ({ item }) => {
   const styles = useStyles()
 
@@ -30,6 +68,13 @@ const MetadataItem: FC<{ item: WorkspaceAgentMetadata }> = ({ item }) => {
   if (item.description === undefined) {
     throw new Error("Metadata item description is undefined")
   }
+
+  const terminalPrefix = "terminal:"
+  const isTerminal = item.description.display_name.startsWith(terminalPrefix)
+
+  const displayName = isTerminal
+    ? item.description.display_name.slice(terminalPrefix.length)
+    : item.description.display_name
 
   const staleThreshold = Math.max(
     item.description.interval + item.description.timeout * 2,
@@ -87,10 +132,15 @@ const MetadataItem: FC<{ item: WorkspaceAgentMetadata }> = ({ item }) => {
 
   return (
     <div className={styles.metadata}>
-      <div className={styles.metadataLabel}>
-        {item.description.display_name}
-      </div>
-      <Box>{value}</Box>
+      <div className={styles.metadataLabel}>{displayName}</div>
+      {isTerminal ? (
+        <MetadataTerminalPopover
+          id={`metadata-terminal-${item.description.key}`}
+          body={item.description.script}
+        />
+      ) : (
+        <Box>{value}</Box>
+      )}
     </div>
   )
 }
@@ -104,6 +154,7 @@ export const AgentMetadataView: FC<AgentMetadataViewProps> = ({ metadata }) => {
   if (metadata.length === 0) {
     return <></>
   }
+
   return (
     <div className={styles.root}>
       <Stack alignItems="baseline" direction="row" spacing={6}>
@@ -225,6 +276,13 @@ const useStyles = makeStyles((theme) => ({
     background: theme.palette.background.paper,
     overflowX: "auto",
     scrollPadding: theme.spacing(0, 4),
+  },
+
+  popover: {
+    padding: 0,
+    width: theme.spacing(38),
+    color: theme.palette.text.secondary,
+    marginTop: theme.spacing(0.5),
   },
 
   metadata: {
