@@ -103,5 +103,16 @@ Example.args = {
         key: "big",
       },
     },
+    {
+      result: {
+        ...resultDefaults,
+        value: "blah blah",
+      },
+      description: {
+        ...descriptionDefaults,
+        display_name: "terminal:hello world",
+        key: "term",
+      },
+    },
   ],
 }
