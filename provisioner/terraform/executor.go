@@ -84,6 +84,10 @@ func (e *executor) execWriteOutput(ctx, killCtx context.Context, args, env []str
 	cmd.Stdout = syncWriter{mut, stdOutWriter}
 	cmd.Stderr = syncWriter{mut, stdErrWriter}
 
+	e.server.logger.Debug(ctx, "executing terraform command",
+		slog.F("binary_path", e.binaryPath),
+		slog.F("args", args),
+	)
 	err = cmd.Start()
 	if err != nil {
 		return err
@@ -276,6 +280,7 @@ func (e *executor) planResources(ctx, killCtx context.Context, planfilePath stri
 	}
 	modules := []*tfjson.StateModule{}
 	if plan.PriorState != nil {
+		// mod := plan.PriorState.Values.RootModule
 		modules = append(modules, plan.PriorState.Values.RootModule)
 	}
 	modules = append(modules, plan.PlannedValues.RootModule)
