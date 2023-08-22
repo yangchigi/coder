@@ -1,25 +1,120 @@
+import Box, { BoxProps } from "@mui/material/Box"
+import Popover from "@mui/material/Popover"
+import Skeleton from "@mui/material/Skeleton"
+import Tooltip from "@mui/material/Tooltip"
 import makeStyles from "@mui/styles/makeStyles"
 import { watchAgentMetadata } from "api/api"
 import { WorkspaceAgent, WorkspaceAgentMetadata } from "api/typesGenerated"
 import { Stack } from "components/Stack/Stack"
 import dayjs from "dayjs"
 import {
-  createContext,
   FC,
+  createContext,
   useContext,
   useEffect,
   useRef,
   useState,
 } from "react"
-import Skeleton from "@mui/material/Skeleton"
+import { colors } from "theme/colors"
 import { MONOSPACE_FONT_FAMILY } from "theme/constants"
 import { combineClasses } from "utils/combineClasses"
-import Tooltip from "@mui/material/Tooltip"
-import Box, { BoxProps } from "@mui/material/Box"
+import * as XTerm from "xterm"
+import { FitAddon } from "xterm-addon-fit"
+import "xterm/css/xterm.css"
 
 type ItemStatus = "stale" | "valid" | "loading"
 
 export const WatchAgentMetadataContext = createContext(watchAgentMetadata)
+
+const MetadataTerminalPopover: FC<{
+  id: string
+  value: string
+}> = ({ id, value: value }) => {
+  const styles = useStyles()
+
+  const viewTermRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+
+  const [xtermRef, setXtermRef] = useState<HTMLDivElement | null>(null)
+  const [terminal, setTerminal] = useState<XTerm.Terminal | null>(null)
+  const [fitAddon, setFitAddon] = useState<FitAddon | null>(null)
+
+  // Create the terminal.
+  // Largely taken from TerminalPage.
+  useEffect(() => {
+    if (!xtermRef) {
+      return
+    }
+    const terminal = new XTerm.Terminal({
+      allowTransparency: true,
+      disableStdin: true,
+      fontFamily: MONOSPACE_FONT_FAMILY,
+      fontSize: 16,
+      theme: {
+        background: colors.gray[16],
+      },
+    })
+    console.log("created terminal", terminal)
+
+    const fitAddon = new FitAddon()
+    setTerminal(terminal)
+    setFitAddon(fitAddon)
+    fitAddon.fit()
+    terminal.open(xtermRef)
+    terminal.write(value)
+
+    return () => {
+      terminal.dispose()
+    }
+  }, [xtermRef, open])
+
+  useEffect(() => {
+    if (open && terminal && fitAddon) {
+      fitAddon.fit()
+    }
+  }, [open, terminal, fitAddon])
+
+  useEffect(() => {
+    if (open && terminal && fitAddon) {
+      setTimeout(() => fitAddon.fit(), 0)
+    }
+  }, [open, terminal, fitAddon])
+
+  return (
+    <>
+      <div
+        className={styles.viewTerminal}
+        ref={viewTermRef}
+        onMouseOver={() => {
+          setOpen(true)
+        }}
+      >
+        View Terminal
+      </div>
+
+      <Popover
+        id={id}
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorEl={viewTermRef.current}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "left",
+        }}
+      >
+        <Box p={1}>
+          <div
+            className={styles.terminal}
+            ref={(el) => {
+              setXtermRef(el)
+            }}
+            data-testid="terminal"
+          />
+        </Box>
+      </Popover>
+    </>
+  )
+}
 
 const MetadataItem: FC<{ item: WorkspaceAgentMetadata }> = ({ item }) => {
   const styles = useStyles()
@@ -30,6 +125,13 @@ const MetadataItem: FC<{ item: WorkspaceAgentMetadata }> = ({ item }) => {
   if (item.description === undefined) {
     throw new Error("Metadata item description is undefined")
   }
+
+  const terminalPrefix = "terminal:"
+  const isTerminal = item.description.display_name.startsWith(terminalPrefix)
+
+  const displayName = isTerminal
+    ? item.description.display_name.slice(terminalPrefix.length)
+    : item.description.display_name
 
   const staleThreshold = Math.max(
     item.description.interval + item.description.timeout * 2,
@@ -87,10 +189,15 @@ const MetadataItem: FC<{ item: WorkspaceAgentMetadata }> = ({ item }) => {
 
   return (
     <div className={styles.metadata}>
-      <div className={styles.metadataLabel}>
-        {item.description.display_name}
-      </div>
-      <Box>{value}</Box>
+      <div className={styles.metadataLabel}>{displayName}</div>
+      {isTerminal ? (
+        <MetadataTerminalPopover
+          id={`metadata-terminal-${item.description.key}`}
+          value={item.result.value}
+        />
+      ) : (
+        <Box>{value}</Box>
+      )}
     </div>
   )
 }
@@ -104,6 +211,7 @@ export const AgentMetadataView: FC<AgentMetadataViewProps> = ({ metadata }) => {
   if (metadata.length === 0) {
     return <></>
   }
+
   return (
     <div className={styles.root}>
       <Stack alignItems="baseline" direction="row" spacing={6}>
@@ -225,6 +333,53 @@ const useStyles = makeStyles((theme) => ({
     background: theme.palette.background.paper,
     overflowX: "auto",
     scrollPadding: theme.spacing(0, 4),
+  },
+
+  viewTerminal: {
+    fontFamily: MONOSPACE_FONT_FAMILY,
+    display: "inline-block",
+    textDecoration: "underline",
+    fontWeight: 600,
+    margin: 0,
+    fontSize: 14,
+    borderRadius: 4,
+    color: theme.palette.text.primary,
+  },
+
+  terminal: {
+    width: "100vw",
+    height: "30vh",
+    overflow: "hidden",
+    backgroundColor: theme.palette.background.paper,
+    flex: 1,
+    // These styles attempt to mimic the VS Code scrollbar.
+    "& .xterm": {
+      padding: 4,
+      width: "100vw",
+      height: "100vh",
+    },
+    "& .xterm-viewport": {
+      // This is required to force full-width on the terminal.
+      // Otherwise there's a small white bar to the right of the scrollbar.
+      width: "auto !important",
+    },
+    "& .xterm-viewport::-webkit-scrollbar": {
+      width: "10px",
+    },
+    "& .xterm-viewport::-webkit-scrollbar-track": {
+      backgroundColor: "inherit",
+    },
+    "& .xterm-viewport::-webkit-scrollbar-thumb": {
+      minHeight: 20,
+      backgroundColor: "rgba(255, 255, 255, 0.18)",
+    },
+  },
+
+  popover: {
+    padding: 0,
+    width: theme.spacing(38),
+    color: theme.palette.text.secondary,
+    marginTop: theme.spacing(0.5),
   },
 
   metadata: {
