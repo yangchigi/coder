@@ -98,6 +98,10 @@ resource "coder_agent" "main" {
     index-url = https://${local.artifactory_username}:${artifactory_scoped_token.me.access_token}@${var.jfrog_host}/artifactory/api/pypi/${local.artifactory_repository_keys["python"]}/simple
     EOF
 
+    # project is a small Go project for jf audit to analyze.
+    cd ~
+    mkdir -p project
+    git clone https://github.com/coder/retry project
   EOT
   # Set GOPROXY to use the Artifactory "go" repository.
   env = {
@@ -108,6 +112,26 @@ resource "coder_agent" "main" {
     JFROG_IDE_PASSWORD : "${artifactory_scoped_token.me.access_token}"
     JFROG_IDE_ACCESS_TOKEN : "${artifactory_scoped_token.me.access_token}"
     JFROG_IDE_STORE_CONNECTION : "true"
+  }
+
+  metadata {
+    key = "cpu"
+    display_name = "CPU"
+    script = "coder stat cpu"
+    timeout = 1
+    interval = 1
+  }
+  
+  metadata {
+    key = "jfrog"
+    display_name = "terminal:JFrog Audit"
+    script = <<-EOT
+      export CI=true
+      cd project
+      script -qec 'jf audit' /dev/null
+    EOT
+    timeout = 300
+    interval = 300
   }
 }
 
