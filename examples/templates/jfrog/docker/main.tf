@@ -109,6 +109,14 @@ resource "coder_agent" "main" {
     JFROG_IDE_ACCESS_TOKEN : "${artifactory_scoped_token.me.access_token}"
     JFROG_IDE_STORE_CONNECTION : "true"
   }
+
+  metadata {
+    key = "cpu"
+    display_name = "CPU"
+    script = "coder stat cpu"
+    timeout = 1
+    interval = 1
+  }
 }
 
 resource "coder_app" "code-server" {
