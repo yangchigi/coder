@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -17,7 +16,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,7 +24,6 @@ import (
 	"golang.org/x/exp/slices"
 	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 	"nhooyr.io/websocket"
 	"tailscale.com/tailcfg"
@@ -1567,7 +1564,13 @@ func (api *API) workspaceAgentPostMetadata(rw http.ResponseWriter, r *http.Reque
 		slog.F("value", ellipse(datum.Value, 16)),
 	)
 
-	err = api.Pubsub.Publish(watchWorkspaceAgentMetadataChannel(workspaceAgent.ID), []byte(datum.Key))
+	datumJSON, err := json.Marshal(datum)
+	if err != nil {
+		httpapi.InternalServerError(rw, err)
+		return
+	}
+
+	err = api.Pubsub.Publish(watchWorkspaceAgentMetadataChannel(workspaceAgent.ID), datumJSON)
 	if err != nil {
 		httpapi.InternalServerError(rw, err)
 		return
@@ -1593,7 +1596,7 @@ func (api *API) watchWorkspaceAgentMetadata(rw http.ResponseWriter, r *http.Requ
 		)
 	)
 
-	sendEvent, senderClosed, err := httpapi.ServerSentEventSender(rw, r)
+	sseSendEvent, sseSenderClosed, err := httpapi.ServerSentEventSender(rw, r)
 	if err != nil {
 		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
 			Message: "Internal error setting up server-sent events.",
@@ -1603,30 +1606,25 @@ func (api *API) watchWorkspaceAgentMetadata(rw http.ResponseWriter, r *http.Requ
 	}
 	// Prevent handler from returning until the sender is closed.
 	defer func() {
-		<-senderClosed
+		<-sseSenderClosed
 	}()
 
 	const refreshInterval = time.Second * 5
 	refreshTicker := time.NewTicker(refreshInterval)
 	defer refreshTicker.Stop()
 
-	var (
-		lastDBMetaMu sync.Mutex
-		lastDBMeta   []database.WorkspaceAgentMetadatum
-	)
+	var lastMetadata []database.WorkspaceAgentMetadatum
 
-	sendMetadata := func(pull bool) {
-		log.Debug(ctx, "sending metadata update", "pull", pull)
-		lastDBMetaMu.Lock()
-		defer lastDBMetaMu.Unlock()
+	sendMetadata := func(pullDB bool) {
+		log.Debug(ctx, "sending metadata update", "pull_db", pullDB)
 
-		var err error
-		if pull {
+		if pullDB {
+			var err error
 			// We always use the original Request context because it contains
 			// the RBAC actor.
-			lastDBMeta, err = api.Database.GetWorkspaceAgentMetadata(ctx, workspaceAgent.ID)
+			lastMetadata, err = api.Database.GetWorkspaceAgentMetadata(ctx, workspaceAgent.ID)
 			if err != nil {
-				_ = sendEvent(ctx, codersdk.ServerSentEvent{
+				_ = sseSendEvent(ctx, codersdk.ServerSentEvent{
 					Type: codersdk.ServerSentEventTypeError,
 					Data: codersdk.Response{
 						Message: "Internal error getting metadata.",
@@ -1635,7 +1633,7 @@ func (api *API) watchWorkspaceAgentMetadata(rw http.ResponseWriter, r *http.Requ
 				})
 				return
 			}
-			slices.SortFunc(lastDBMeta, func(a, b database.WorkspaceAgentMetadatum) int {
+			slices.SortFunc(lastMetadata, func(a, b database.WorkspaceAgentMetadatum) int {
 				return slice.Ascending(a.Key, b.Key)
 			})
 
@@ -1644,34 +1642,26 @@ func (api *API) watchWorkspaceAgentMetadata(rw http.ResponseWriter, r *http.Requ
 			refreshTicker.Reset(refreshInterval)
 		}
 
-		_ = sendEvent(ctx, codersdk.ServerSentEvent{
+		_ = sseSendEvent(ctx, codersdk.ServerSentEvent{
 			Type: codersdk.ServerSentEventTypeData,
-			Data: convertWorkspaceAgentMetadata(lastDBMeta),
+			Data: convertWorkspaceAgentMetadata(lastMetadata),
 		})
 	}
 
-	// Note: we previously used a debounce here, but when the rate of metadata updates was too
-	// high the debounce would never fire.
-	//
-	// The rate-limit has its own caveat. If the agent sends a burst of metadata
-	// but then goes quiet, we will never pull the new metadata and the frontend
-	// will go stale until refresh. This would only happen if the agent was
-	// under extreme load. Under normal operations, the interval between metadata
-	// updates is constant so there is no burst phenomenon.
-	pubsubRatelimit := rate.NewLimiter(rate.Every(time.Second), 2)
-	if flag.Lookup("test.v") != nil {
-		// We essentially disable the rate-limit in tests for determinism.
-		pubsubRatelimit = rate.NewLimiter(rate.Every(time.Second*100), 100)
-	}
+	// Note: we tried using a ratelimit and debounce here before but it was
+	// pretty buggy.
+	pubsubUpdates := make(chan database.UpdateWorkspaceAgentMetadataParams, 8)
 
 	// Send metadata on updates, we must ensure subscription before sending
 	// initial metadata to guarantee that events in-between are not missed.
-	cancelSub, err := api.Pubsub.Subscribe(watchWorkspaceAgentMetadataChannel(workspaceAgent.ID), func(_ context.Context, _ []byte) {
-		allow := pubsubRatelimit.Allow()
-		log.Debug(ctx, "received metadata update", "allow", allow)
-		if allow {
-			sendMetadata(true)
+	cancelSub, err := api.Pubsub.Subscribe(watchWorkspaceAgentMetadataChannel(workspaceAgent.ID), func(_ context.Context, byt []byte) {
+		var update database.UpdateWorkspaceAgentMetadataParams
+		err = json.Unmarshal(byt, &update)
+		if err != nil {
+			api.Logger.Error(ctx, "failed to unmarshal pubsub message", slog.Error(err))
+			return
 		}
+		pubsubUpdates <- update
 	})
 	if err != nil {
 		httpapi.InternalServerError(rw, err)
@@ -1684,16 +1674,29 @@ func (api *API) watchWorkspaceAgentMetadata(rw http.ResponseWriter, r *http.Requ
 
 	for {
 		select {
-		case <-senderClosed:
-			return
-		case <-refreshTicker.C:
-		}
+		case update := <-pubsubUpdates:
+			// There can only be 128 metadatums so this will always be fast.
+			for i, datum := range lastMetadata {
+				if datum.Key != update.Key {
+					continue
+				}
 
-		// Avoid spamming the DB with reads we know there are no updates. We want
-		// to continue sending updates to the frontend so that "Result.Age"
-		// is always accurate. This way, the frontend doesn't need to
-		// sync its own clock with the backend.
-		sendMetadata(false)
+				lastMetadata[i] = database.WorkspaceAgentMetadatum{
+					Value:       update.Value,
+					Error:       update.Error,
+					CollectedAt: update.CollectedAt,
+				}
+			}
+			sendMetadata(false)
+		case <-refreshTicker.C:
+			// Avoid spamming the DB with reads we know there are no updates. We want
+			// to continue sending updates to the frontend so that "Result.Age"
+			// is always accurate. This way, the frontend doesn't need to
+			// sync its own clock with the backend.
+			sendMetadata(false)
+		case <-sseSenderClosed:
+			return
+		}
 	}
 }
 
