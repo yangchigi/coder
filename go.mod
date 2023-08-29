@@ -196,6 +196,8 @@ require (
 	tailscale.com v1.46.1
 )
 
+require gopkg.in/DataDog/dd-trace-go.v1 v1.54.0
+
 require (
 	cloud.google.com/go/compute v1.23.0 // indirect
 	cloud.google.com/go/logging v1.8.1 // indirect
@@ -261,7 +263,6 @@ require (
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
-	github.com/gin-gonic/gin v1.9.1 // indirect
 	github.com/go-chi/chi v1.5.4 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
