@@ -13,6 +13,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.14.0"
+	ddotel "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentelemetry"
+
 	"golang.org/x/xerrors"
 	"google.golang.org/grpc/credentials"
 )
@@ -24,7 +26,8 @@ type TracerOpts struct {
 	Default bool
 	// Coder exports traces to Coder's public tracing ingest service and is used
 	// to improve the product. It is disabled when opting out of telemetry.
-	Coder bool
+	Coder   bool
+	DataDog bool
 	// Exports traces to Honeycomb.io with the provided API key.
 	Honeycomb string
 }
@@ -44,6 +47,17 @@ func TracerProvider(ctx context.Context, service string, opts TracerOpts) (*sdkt
 		}
 		closers = []func(context.Context) error{}
 	)
+
+	if opts.DataDog {
+		// See more:
+		// https://docs.datadoghq.com/tracing/metrics/runtime_metrics/go/
+		dd := ddotel.NewTracerProvider()
+		closers = append(closers, func(_ context.Context) error {
+			// For some reason, this doesn't appear to actually wind down
+			// the goroutines.
+			return dd.Shutdown()
+		})
+	}
 
 	if opts.Default {
 		exporter, err := DefaultExporter(ctx)
