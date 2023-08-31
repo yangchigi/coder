@@ -60,8 +60,8 @@ dd if=/dev/urandom bs=32 count=1 | base64
 kubectl create secret generic coder-external-token-encryption-keys --from-literal=keys=<key>
 ```
 
-1. In your Coder configuration set `CODER_EXTERNAL_TOKEN_ENCRYPTION_KEYS` to
-   a comma-separated list of base64-encoded keys. For example, in your Helm
+1. In your Coder configuration set `CODER_EXTERNAL_TOKEN_ENCRYPTION_KEYS` to a
+   comma-separated list of base64-encoded keys. For example, in your Helm
    `values.yaml`:
 
 ```yaml
