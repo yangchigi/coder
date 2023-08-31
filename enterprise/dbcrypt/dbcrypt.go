@@ -26,7 +26,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
-	"errors"
 	"strings"
 
 	"github.com/coder/coder/v2/coderd/database"
@@ -52,24 +51,18 @@ const MagicPrefix = "dbcrypt-"
 const sentinelValue = "coder"
 
 var (
-	ErrNotEnabled       = xerrors.New("encryption is not enabled")
-	ErrSentinelMismatch = xerrors.New("database is already encrypted under a different key")
-	b64encode           = base64.StdEncoding.EncodeToString
-	b64decode           = base64.StdEncoding.DecodeString
+	ErrNotEnabled = xerrors.New("encryption is not enabled")
+	b64encode     = base64.StdEncoding.EncodeToString
+	b64decode     = base64.StdEncoding.DecodeString
 )
 
 // DecryptFailedError is returned when decryption fails.
-// It unwraps to sql.ErrNoRows.
 type DecryptFailedError struct {
 	Inner error
 }
 
 func (e *DecryptFailedError) Error() string {
 	return xerrors.Errorf("decrypt failed: %w", e.Inner).Error()
-}
-
-func (*DecryptFailedError) Unwrap() error {
-	return sql.ErrNoRows
 }
 
 // New creates a database.Store wrapper that encrypts/decrypts values
@@ -108,7 +101,10 @@ func (db *dbCrypt) GetDBCryptSentinelValue(ctx context.Context) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	return rawValue, db.decryptFields(&rawValue)
+	if err := db.decryptFields(&rawValue); err != nil {
+		return "", err
+	}
+	return rawValue, nil
 }
 
 func (db *dbCrypt) GetUserLinkByLinkedID(ctx context.Context, linkedID string) (database.UserLink, error) {
@@ -137,7 +133,10 @@ func (db *dbCrypt) GetUserLinkByUserIDLoginType(ctx context.Context, params data
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	return link, db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken)
+	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+		return database.UserLink{}, err
+	}
+	return link, nil
 }
 
 func (db *dbCrypt) InsertUserLink(ctx context.Context, params database.InsertUserLinkParams) (database.UserLink, error) {
@@ -149,7 +148,10 @@ func (db *dbCrypt) InsertUserLink(ctx context.Context, params database.InsertUse
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	return link, db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken)
+	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+		return database.UserLink{}, err
+	}
+	return link, nil
 }
 
 func (db *dbCrypt) UpdateUserLink(ctx context.Context, params database.UpdateUserLinkParams) (database.UserLink, error) {
@@ -161,7 +163,10 @@ func (db *dbCrypt) UpdateUserLink(ctx context.Context, params database.UpdateUse
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	return updated, db.decryptFields(&updated.OAuthAccessToken, &updated.OAuthRefreshToken)
+	if err := db.decryptFields(&updated.OAuthAccessToken, &updated.OAuthRefreshToken); err != nil {
+		return database.UserLink{}, err
+	}
+	return updated, nil
 }
 
 func (db *dbCrypt) InsertGitAuthLink(ctx context.Context, params database.InsertGitAuthLinkParams) (database.GitAuthLink, error) {
@@ -173,7 +178,10 @@ func (db *dbCrypt) InsertGitAuthLink(ctx context.Context, params database.Insert
 	if err != nil {
 		return database.GitAuthLink{}, err
 	}
-	return link, db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken)
+	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+		return database.GitAuthLink{}, err
+	}
+	return link, nil
 }
 
 func (db *dbCrypt) GetGitAuthLink(ctx context.Context, params database.GetGitAuthLinkParams) (database.GitAuthLink, error) {
@@ -181,7 +189,10 @@ func (db *dbCrypt) GetGitAuthLink(ctx context.Context, params database.GetGitAut
 	if err != nil {
 		return database.GitAuthLink{}, err
 	}
-	return link, db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken)
+	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+		return database.GitAuthLink{}, err
+	}
+	return link, nil
 }
 
 func (db *dbCrypt) GetGitAuthLinksByUserID(ctx context.Context, userID uuid.UUID) ([]database.GitAuthLink, error) {
@@ -206,7 +217,10 @@ func (db *dbCrypt) UpdateGitAuthLink(ctx context.Context, params database.Update
 	if err != nil {
 		return database.GitAuthLink{}, err
 	}
-	return updated, db.decryptFields(&updated.OAuthAccessToken, &updated.OAuthRefreshToken)
+	if err := db.decryptFields(&updated.OAuthAccessToken, &updated.OAuthRefreshToken); err != nil {
+		return database.GitAuthLink{}, err
+	}
+	return updated, nil
 }
 
 func (db *dbCrypt) SetDBCryptSentinelValue(ctx context.Context, value string) error {
@@ -274,23 +288,33 @@ func (db *dbCrypt) decryptFields(fields ...*string) error {
 }
 
 func ensureEncrypted(ctx context.Context, dbc *dbCrypt) error {
+	// The purpose of this function is to ensure that coder is not started
+	// against a database that has been encrypted with a different key.
+	// We perform this in a transaction with repeatable read isolation as
+	// there may be multiple coder instances running against the same database.
+	// There are four possible states:
+	// ---------------------------------------------------------------------------------------------------
+	// | # | Value | Error              | Action                        | Meaning									       |
+	// ---------------------------------------------------------------------------------------------------
+	// | 1 | "..." | nil                | Write encrypted sentinelValue | Maybe encrypted with known key |
+	// | 2 | ""    | ErrNoRows          | Write encrypted sentinelValue | Not encrypted                  |
+	// | 3 | ""    | DecryptFailedError | Return error                  | Encrypted with unknown key     |
+	// | 4 | ""    | other error        | Return error                  | Some other error               |
+	// ---------------------------------------------------------------------------------------------------
 	return dbc.InTx(func(s database.Store) error {
-		val, err := s.GetDBCryptSentinelValue(ctx)
-		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
+		_, err := s.GetDBCryptSentinelValue(ctx)
+		if err != nil && !xerrors.Is(err, sql.ErrNoRows) {
+			return err // Case 3 or 4
 		}
 
-		if val != "" && val != sentinelValue {
-			return ErrSentinelMismatch
-		}
-
-		// Mark the database as officially having been touched by the new cipher.
+		// We don't really care about the value, just that we can decrypt it.
+		// If we got this far, it could be case 1 or 2. Being able to decrypt
+		// the value doesn't necessarily tell us it was encrypted with the current
+		// primary cipher, so we need to re-encrypt the value in any case.
 		if err := s.SetDBCryptSentinelValue(ctx, sentinelValue); err != nil {
 			return xerrors.Errorf("mark database as encrypted: %w", err)
 		}
 
 		return nil
-	}, nil)
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 }

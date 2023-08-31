@@ -210,7 +210,7 @@ func TestNew(t *testing.T) {
 
 		// And: the sentinel value is encrypted with a different cipher
 		cipher1 := initCipher(t)
-		field := "coder"
+		field := sentinelValue
 		encrypted, err := ciphers(cipher1).Encrypt([]byte(field))
 		require.NoError(t, err)
 		b64encrypted := base64.StdEncoding.EncodeToString(encrypted)
@@ -220,7 +220,8 @@ func TestNew(t *testing.T) {
 		cipher2 := initCipher(t)
 		_, err = New(ctx, rawDB, ciphers(cipher2))
 		// Then: a special error is returned
-		require.ErrorIs(t, err, ErrSentinelMismatch)
+		var derr *DecryptFailedError
+		require.ErrorAs(t, err, &derr)
 
 		// And the sentinel value should remain unchanged. For now.
 		rawVal, err := rawDB.GetDBCryptSentinelValue(ctx)
