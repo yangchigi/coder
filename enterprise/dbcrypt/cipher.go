@@ -17,8 +17,8 @@ type Cipher interface {
 	HexDigest() string
 }
 
-// CipherAES256 returns a new AES-256 cipher.
-func CipherAES256(key []byte) (*AES256, error) {
+// cipherAES256 returns a new AES-256 cipher.
+func cipherAES256(key []byte) (*aes256, error) {
 	if len(key) != 32 {
 		return nil, xerrors.Errorf("key must be 32 bytes")
 	}
@@ -31,16 +31,16 @@ func CipherAES256(key []byte) (*AES256, error) {
 		return nil, err
 	}
 	digest := fmt.Sprintf("%x", sha256.Sum256(key))[:7]
-	return &AES256{aead: aead, digest: digest}, nil
+	return &aes256{aead: aead, digest: digest}, nil
 }
 
-type AES256 struct {
+type aes256 struct {
 	aead cipher.AEAD
 	// digest is the first 7 bytes of the hex-encoded SHA-256 digest of aead.
 	digest string
 }
 
-func (a *AES256) Encrypt(plaintext []byte) ([]byte, error) {
+func (a *aes256) Encrypt(plaintext []byte) ([]byte, error) {
 	nonce := make([]byte, a.aead.NonceSize())
 	_, err := io.ReadFull(rand.Reader, nonce)
 	if err != nil {
@@ -51,7 +51,7 @@ func (a *AES256) Encrypt(plaintext []byte) ([]byte, error) {
 	return a.aead.Seal(dst, nonce, plaintext, nil), nil
 }
 
-func (a *AES256) Decrypt(ciphertext []byte) ([]byte, error) {
+func (a *aes256) Decrypt(ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) < a.aead.NonceSize() {
 		return nil, xerrors.Errorf("ciphertext too short")
 	}
@@ -62,7 +62,7 @@ func (a *AES256) Decrypt(ciphertext []byte) ([]byte, error) {
 	return decrypted, nil
 }
 
-func (a *AES256) HexDigest() string {
+func (a *aes256) HexDigest() string {
 	return a.digest
 }
 
@@ -74,10 +74,22 @@ type (
 	}
 )
 
-// NewCiphers returns a new Ciphers instance with the given ciphers.
-// The first cipher in the list is the primary cipher. Any ciphers after the
+// NewCiphers returns a new Ciphers instance with the given keys.
+// The first key in the list is the primary cipher. Any keys after the
 // first are considered secondary ciphers and are only used for decryption.
-func NewCiphers(cs ...Cipher) *Ciphers {
+func NewCiphers(keys ...[]byte) (*Ciphers, error) {
+	var ks []Cipher
+	for _, k := range keys {
+		c, err := cipherAES256(k)
+		if err != nil {
+			return nil, err
+		}
+		ks = append(ks, c)
+	}
+	return ciphers(ks...), nil
+}
+
+func ciphers(cs ...Cipher) *Ciphers {
 	var primary string
 	m := make(map[string]Cipher)
 	for idx, c := range cs {

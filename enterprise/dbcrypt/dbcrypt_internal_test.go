@@ -1,4 +1,4 @@
-package dbcrypt_test
+package dbcrypt
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"github.com/coder/coder/v2/coderd/database"
 	"github.com/coder/coder/v2/coderd/database/dbgen"
 	"github.com/coder/coder/v2/coderd/database/dbtestutil"
-	"github.com/coder/coder/v2/enterprise/dbcrypt"
 )
 
 func TestUserLinks(t *testing.T) {
@@ -164,13 +163,13 @@ func TestNew(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		t.Parallel()
 		// Given: a cipher is loaded
-		cipher := dbcrypt.NewCiphers(initCipher(t))
+		cipher := ciphers(initCipher(t))
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 		rawDB, _ := dbtestutil.NewDB(t)
 
 		// When: we init the crypt db
-		cryptDB, err := dbcrypt.New(ctx, rawDB, cipher)
+		cryptDB, err := New(ctx, rawDB, cipher)
 		require.NoError(t, err)
 
 		// Then: the sentinel value is encrypted
@@ -180,7 +179,7 @@ func TestNew(t *testing.T) {
 
 		rawVal, err := rawDB.GetDBCryptSentinelValue(ctx)
 		require.NoError(t, err)
-		require.Contains(t, rawVal, dbcrypt.MagicPrefix)
+		require.Contains(t, rawVal, MagicPrefix)
 		requireEncryptedEquals(t, cipher, rawVal, "coder")
 	})
 
@@ -192,7 +191,7 @@ func TestNew(t *testing.T) {
 		rawDB, _ := dbtestutil.NewDB(t)
 
 		// When: we init the crypt db
-		_, err := dbcrypt.New(ctx, rawDB, nil)
+		_, err := New(ctx, rawDB, nil)
 
 		// Then: an error is returned
 		require.ErrorContains(t, err, "no ciphers configured")
@@ -212,39 +211,39 @@ func TestNew(t *testing.T) {
 		// And: the sentinel value is encrypted with a different cipher
 		cipher1 := initCipher(t)
 		field := "coder"
-		encrypted, err := dbcrypt.NewCiphers(cipher1).Encrypt([]byte(field))
+		encrypted, err := ciphers(cipher1).Encrypt([]byte(field))
 		require.NoError(t, err)
 		b64encrypted := base64.StdEncoding.EncodeToString(encrypted)
-		require.NoError(t, rawDB.SetDBCryptSentinelValue(ctx, dbcrypt.MagicPrefix+b64encrypted))
+		require.NoError(t, rawDB.SetDBCryptSentinelValue(ctx, MagicPrefix+b64encrypted))
 
 		// When: we init the crypt db with no access to the old cipher
 		cipher2 := initCipher(t)
-		_, err = dbcrypt.New(ctx, rawDB, dbcrypt.NewCiphers(cipher2))
+		_, err = New(ctx, rawDB, ciphers(cipher2))
 		// Then: a special error is returned
-		require.ErrorIs(t, err, dbcrypt.ErrSentinelMismatch)
+		require.ErrorIs(t, err, ErrSentinelMismatch)
 
 		// And the sentinel value should remain unchanged. For now.
 		rawVal, err := rawDB.GetDBCryptSentinelValue(ctx)
 		require.NoError(t, err)
-		requireEncryptedEquals(t, dbcrypt.NewCiphers(cipher1), rawVal, field)
+		requireEncryptedEquals(t, ciphers(cipher1), rawVal, field)
 
 		// When: we set the secondary cipher
-		cs := dbcrypt.NewCiphers(cipher2, cipher1)
-		_, err = dbcrypt.New(ctx, rawDB, cs)
+		cs := ciphers(cipher2, cipher1)
+		_, err = New(ctx, rawDB, cs)
 		// Then: no error is returned
 		require.NoError(t, err)
 
 		// And the sentinel value should be re-encrypted with the new value.
 		rawVal, err = rawDB.GetDBCryptSentinelValue(ctx)
 		require.NoError(t, err)
-		requireEncryptedEquals(t, dbcrypt.NewCiphers(cipher2), rawVal, field)
+		requireEncryptedEquals(t, ciphers(cipher2), rawVal, field)
 	})
 }
 
-func requireEncryptedEquals(t *testing.T, c dbcrypt.Cipher, value, expected string) {
+func requireEncryptedEquals(t *testing.T, c Cipher, value, expected string) {
 	t.Helper()
 	require.Greater(t, len(value), 8, "value is not encrypted")
-	require.Equal(t, dbcrypt.MagicPrefix, value[:8], "missing magic prefix")
+	require.Equal(t, MagicPrefix, value[:8], "missing magic prefix")
 	data, err := base64.StdEncoding.DecodeString(value[8:])
 	require.NoError(t, err, "invalid base64")
 	require.Greater(t, len(data), 8, "missing cipher digest")
@@ -254,17 +253,17 @@ func requireEncryptedEquals(t *testing.T, c dbcrypt.Cipher, value, expected stri
 	require.Equal(t, expected, string(got), "decrypted data does not match")
 }
 
-func initCipher(t *testing.T) *dbcrypt.AES256 {
+func initCipher(t *testing.T) *aes256 {
 	t.Helper()
 	key := make([]byte, 32) // AES-256 key size is 32 bytes
 	_, err := io.ReadFull(rand.Reader, key)
 	require.NoError(t, err)
-	c, err := dbcrypt.CipherAES256(key)
+	c, err := cipherAES256(key)
 	require.NoError(t, err)
 	return c
 }
 
-func setup(t *testing.T) (db, cryptodb database.Store, ciphers *dbcrypt.Ciphers) {
+func setup(t *testing.T) (db, cryptodb database.Store, cs *Ciphers) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -273,17 +272,17 @@ func setup(t *testing.T) (db, cryptodb database.Store, ciphers *dbcrypt.Ciphers)
 	_, err := rawDB.GetDBCryptSentinelValue(ctx)
 	require.ErrorIs(t, err, sql.ErrNoRows)
 
-	ciphers = dbcrypt.NewCiphers(initCipher(t))
-	cryptDB, err := dbcrypt.New(ctx, rawDB, ciphers)
+	cs = ciphers(initCipher(t))
+	cryptDB, err := New(ctx, rawDB, cs)
 	require.NoError(t, err)
 
 	rawVal, err := rawDB.GetDBCryptSentinelValue(ctx)
 	require.NoError(t, err)
-	require.Contains(t, rawVal, dbcrypt.MagicPrefix)
+	require.Contains(t, rawVal, MagicPrefix)
 
 	cryptVal, err := cryptDB.GetDBCryptSentinelValue(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "coder", cryptVal)
 
-	return rawDB, cryptDB, ciphers
+	return rawDB, cryptDB, cs
 }

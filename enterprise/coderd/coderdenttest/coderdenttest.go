@@ -86,9 +86,9 @@ func NewWithAPI(t *testing.T, options *Options) (
 		require.NoError(t, err)
 	}
 	if options.ExternalTokenEncryption == nil {
-		c, err := dbcrypt.CipherAES256([]byte(testEncryptionKey))
+		c, err := dbcrypt.NewCiphers([]byte(testEncryptionKey))
 		require.NoError(t, err)
-		options.ExternalTokenEncryption = dbcrypt.NewCiphers(c)
+		options.ExternalTokenEncryption = c
 	}
 	coderAPI, err := coderd.New(context.Background(), &coderd.Options{
 		RBAC:                       true,

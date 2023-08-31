@@ -72,19 +72,19 @@ func (r *RootCmd) server() *clibase.Cmd {
 		}
 
 		if encKeys := options.DeploymentValues.ExternalTokenEncryptionKeys.Value(); len(encKeys) != 0 {
-			cs := make([]dbcrypt.Cipher, 0, len(encKeys))
+			keys := make([][]byte, 0, len(encKeys))
 			for idx, ek := range encKeys {
 				dk, err := base64.StdEncoding.DecodeString(ek)
 				if err != nil {
 					return nil, nil, xerrors.Errorf("decode external-token-encryption-key %d: %w", idx, err)
 				}
-				c, err := dbcrypt.CipherAES256(dk)
-				if err != nil {
-					return nil, nil, xerrors.Errorf("create external-token-encryption-key cipher %d: %w", idx, err)
-				}
-				cs = append(cs, c)
+				keys = append(keys, dk)
 			}
-			o.ExternalTokenEncryption = dbcrypt.NewCiphers(cs...)
+			cs, err := dbcrypt.NewCiphers(keys...)
+			if err != nil {
+				return nil, nil, xerrors.Errorf("initialize encryption: %w", err)
+			}
+			o.ExternalTokenEncryption = cs
 		}
 
 		api, err := coderd.New(ctx, o)

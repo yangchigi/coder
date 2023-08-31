@@ -59,15 +59,19 @@ func (*RootCmd) dbcryptRotate() *clibase.Cmd {
 				return xerrors.Errorf("old and new keys must be different")
 			}
 
-			primaryCipher, err := dbcrypt.CipherAES256(newKey)
-			if err != nil {
-				return xerrors.Errorf("create primary cipher: %w", err)
+			keys := make([][]byte, 0, len(vals.ExternalTokenEncryptionKeys))
+			for _, ek := range vals.ExternalTokenEncryptionKeys {
+				dk, err := base64.StdEncoding.DecodeString(ek)
+				if err != nil {
+					return xerrors.Errorf("key must be base64-encoded")
+				}
+				keys = append(keys, dk)
 			}
-			secondaryCipher, err := dbcrypt.CipherAES256(oldKey)
+
+			ciphers, err := dbcrypt.NewCiphers(keys...)
 			if err != nil {
-				return xerrors.Errorf("create secondary cipher: %w", err)
+				return xerrors.Errorf("create ciphers: %w", err)
 			}
-			ciphers := dbcrypt.NewCiphers(primaryCipher, secondaryCipher)
 
 			sqlDB, err := cli.ConnectToPostgres(inv.Context(), logger, "postgres", vals.PostgresURL.Value())
 			if err != nil {

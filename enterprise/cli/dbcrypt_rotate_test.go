@@ -41,9 +41,8 @@ func TestDBCryptRotate(t *testing.T) {
 
 	// Setup an initial cipher
 	keyA := mustString(t, 32)
-	cA, err := dbcrypt.CipherAES256([]byte(keyA))
+	ciphers, err := dbcrypt.NewCiphers([]byte(keyA))
 	require.NoError(t, err)
-	ciphers := dbcrypt.NewCiphers(cA)
 
 	// Create an encrypted database
 	cryptdb, err := dbcrypt.New(ctx, db, ciphers)
@@ -72,7 +71,7 @@ func TestDBCryptRotate(t *testing.T) {
 
 	// Run the cmd with ciphers B,A
 	keyB := mustString(t, 32)
-	cB, err := dbcrypt.CipherAES256([]byte(keyB))
+	cipherB, err := dbcrypt.NewCiphers([]byte(keyB))
 	require.NoError(t, err)
 	externalTokensArg := fmt.Sprintf(
 		"%s,%s",
@@ -97,16 +96,16 @@ func TestDBCryptRotate(t *testing.T) {
 			LoginType: usr.LoginType,
 		})
 		require.NoError(t, err, "failed to get user link for user %s", usr.ID)
-		requireEncrypted(t, cB, ul.OAuthAccessToken)
-		requireEncrypted(t, cB, ul.OAuthRefreshToken)
+		requireEncrypted(t, cipherB, ul.OAuthAccessToken)
+		requireEncrypted(t, cipherB, ul.OAuthRefreshToken)
 
 		gal, err := db.GetGitAuthLink(ctx, database.GetGitAuthLinkParams{
 			UserID:     usr.ID,
 			ProviderID: "fake",
 		})
 		require.NoError(t, err, "failed to get git auth link for user %s", usr.ID)
-		requireEncrypted(t, cB, gal.OAuthAccessToken)
-		requireEncrypted(t, cB, gal.OAuthRefreshToken)
+		requireEncrypted(t, cipherB, gal.OAuthAccessToken)
+		requireEncrypted(t, cipherB, gal.OAuthRefreshToken)
 	}
 }
 
@@ -118,7 +117,7 @@ func requireEncrypted(t *testing.T, c dbcrypt.Cipher, s string) {
 	require.NoError(t, err, "failed to decode base64 string")
 	require.Greater(t, len(decodedVal), 8, "base64-decoded value is too short")
 	require.Equal(t, c.HexDigest(), string(decodedVal[:7]), "cipher digest does not match")
-	_, err = c.Decrypt(decodedVal[8:])
+	_, err = c.Decrypt(decodedVal)
 	require.NoError(t, err, "failed to decrypt value")
 }
 
