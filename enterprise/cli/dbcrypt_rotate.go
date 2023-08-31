@@ -43,8 +43,8 @@ func (*RootCmd) dbcryptRotate() *clibase.Cmd {
 				return xerrors.Errorf("no database configured")
 			}
 
-			if vals.ExternalTokenEncryptionKeys == nil || len(vals.ExternalTokenEncryptionKeys) != 2 {
-				return xerrors.Errorf("dbcrypt-rotate requires exactly two external token encryption keys")
+			if vals.ExternalTokenEncryptionKeys == nil || len(vals.ExternalTokenEncryptionKeys) < 2 {
+				return xerrors.Errorf("dbcrypt-rotate requires at least two external token encryption keys")
 			}
 
 			newKey, err := base64.StdEncoding.DecodeString(vals.ExternalTokenEncryptionKeys[0])

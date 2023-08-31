@@ -280,7 +280,7 @@ Enable one or more experiments. These are not ready for production. Separate mul
 | Type        | <code>string-array</code>                          |
 | Environment | <code>$CODER_EXTERNAL_TOKEN_ENCRYPTION_KEYS</code> |
 
-Encrypt OIDC and Git authentication tokens with AES-256-GCM in the database. The value must be a comma-separated list of base64-encoded keys. A maximum of two keys may be provided. Each key, when base64-decoded, must be exactly 32 bytes in length. The first key will be used to encrypt new values. Subsequent keys will be used as a fallback when decrypting.
+Encrypt OIDC and Git authentication tokens with AES-256-GCM in the database. The value must be a comma-separated list of base64-encoded keys. Each key, when base64-decoded, must be exactly 32 bytes in length. The first key will be used to encrypt new values. Subsequent keys will be used as a fallback when decrypting. During normal operation it is recommended to only set one key.
 
 ### --provisioner-force-cancel-interval
 
