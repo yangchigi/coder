@@ -47,7 +47,7 @@ func TestCipherAES256(t *testing.T) {
 		key := bytes.Repeat([]byte{'a'}, 32)
 		cipher, err := cipherAES256(key)
 		require.NoError(t, err)
-		require.Equal(t, "3ba3f5f", cipher.HexDigest())
+		require.Equal(t, "864f702", cipher.HexDigest())
 
 		encrypted1, err := cipher.Encrypt([]byte("hello world"))
 		require.NoError(t, err)
@@ -121,19 +121,19 @@ func TestCiphersBackwardCompatibility(t *testing.T) {
 		msg = "hello world"
 		key = bytes.Repeat([]byte{'a'}, 32)
 		//nolint: gosec // The below is the base64-encoded result of encrypting the above message with the above key.
-		encoded = `M2JhM2Y1Zi3r1KSStbmfMBXDzdjVcCrtumdMFsJ4QiYlb3fV1HB8yxg9obHaz5I=`
+		encoded = `ODY0ZjcwMi0Rrj5Q0mm+UDcKb0Ge4kU1HX2XsQ6yV7za/2lQrdVb/ZbaUjLBhuU=`
 	)
+
+	cipher, err := cipherAES256(key)
+	require.NoError(t, err)
+	require.Equal(t, "864f702", cipher.HexDigest())
+	cs := ciphers(cipher)
 
 	// This is the code that was used to generate the above.
 	// Note that the output of this code will change every time it is run.
 	// encrypted, err := cs.Encrypt([]byte(msg))
 	// require.NoError(t, err)
 	// t.Logf("encoded: %q", base64.StdEncoding.EncodeToString(encrypted))
-
-	cipher, err := cipherAES256(key)
-	require.NoError(t, err)
-	require.Equal(t, "3ba3f5f", cipher.HexDigest())
-	cs := ciphers(cipher)
 
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	require.NoError(t, err, "the encoded string should be valid base64")

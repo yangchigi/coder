@@ -11,6 +11,18 @@ import (
 	"golang.org/x/xerrors"
 )
 
+// cipherAES256GCM is the name of the AES-256 cipher.
+// This is used to identify the cipher used to encrypt a value.
+// It is added to the digest to ensure that if, in the future,
+// we add a new cipher type, and a key is re-used, we don't
+// accidentally decrypt the wrong values.
+// When adding a new cipher type, add a new constant here
+// and ensure to add the cipher name to the digest of the new
+// cipher type.
+const (
+	cipherAES256GCM = "aes256gcm"
+)
+
 type Cipher interface {
 	Encrypt([]byte) ([]byte, error)
 	Decrypt([]byte) ([]byte, error)
@@ -30,7 +42,12 @@ func cipherAES256(key []byte) (*aes256, error) {
 	if err != nil {
 		return nil, err
 	}
-	digest := fmt.Sprintf("%x", sha256.Sum256(key))[:7]
+	// We add the cipher name to the digest to ensure that if, in the future,
+	// we add a new cipher type, and a key is re-used, we don't accidentally
+	// decrypt the wrong values.
+	toDigest := []byte(cipherAES256GCM)
+	toDigest = append(toDigest, key...)
+	digest := fmt.Sprintf("%x", sha256.Sum256(toDigest))[:7]
 	return &aes256{aead: aead, digest: digest}, nil
 }
 
@@ -121,8 +138,8 @@ func (cs Ciphers) Encrypt(plaintext []byte) ([]byte, error) {
 
 // Decrypt decrypts the given ciphertext using the cipher indicated by the
 // ciphertext's prefix. The prefix is the first 7 bytes of the hex-encoded
-// SHA-256 digest of the cipher's key. Decryption will fail if the prefix
-// does not match any of the configured ciphers.
+// SHA-256 digest of the cipher name and key. Decryption will fail if the
+// prefix does not match any of the configured ciphers.
 func (cs Ciphers) Decrypt(ciphertext []byte) ([]byte, error) {
 	requiredPrefix := string(ciphertext[:7])
 	c, ok := cs.m[requiredPrefix]
@@ -132,7 +149,8 @@ func (cs Ciphers) Decrypt(ciphertext []byte) ([]byte, error) {
 	return c.Decrypt(ciphertext[8:])
 }
 
-// HexDigest returns the digest of the primary cipher.
+// HexDigest returns the digest of the primary cipher. This consists of the
+// first 7 bytes of the hex-encoded SHA-256 digest of the cipher name and key.
 func (cs Ciphers) HexDigest() string {
 	return cs.primary
 }
