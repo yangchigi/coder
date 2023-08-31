@@ -1526,8 +1526,8 @@ type AuditLog struct {
 
 // A table used to determine if the database is encrypted
 type DbcryptSentinel struct {
-	// Ensures that only one row exists in the table.
-	OnlyOne sql.NullInt32 `db:"only_one" json:"only_one"`
+	// Ensures that at most one row exists in the table.
+	OnlyOne int32 `db:"only_one" json:"only_one"`
 	// Used to determine if the database is encrypted.
 	Val string `db:"val" json:"val"`
 }

@@ -268,13 +268,13 @@ CREATE TABLE audit_logs (
 );
 
 CREATE TABLE dbcrypt_sentinel (
-    only_one integer GENERATED ALWAYS AS (1) STORED,
+    only_one integer GENERATED ALWAYS AS (1) STORED NOT NULL,
     val text DEFAULT ''::text NOT NULL
 );
 
 COMMENT ON TABLE dbcrypt_sentinel IS 'A table used to determine if the database is encrypted';
 
-COMMENT ON COLUMN dbcrypt_sentinel.only_one IS 'Ensures that only one row exists in the table.';
+COMMENT ON COLUMN dbcrypt_sentinel.only_one IS 'Ensures that at most one row exists in the table.';
 
 COMMENT ON COLUMN dbcrypt_sentinel.val IS 'Used to determine if the database is encrypted.';
 
