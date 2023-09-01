@@ -21,7 +21,7 @@ func TestUserLinks(t *testing.T) {
 
 	t.Run("InsertUserLink", func(t *testing.T) {
 		t.Parallel()
-		db, crypt, cipher := setup(t)
+		db, crypt, ciphers := setup(t)
 		user := dbgen.User(t, crypt, database.User{})
 		link := dbgen.UserLink(t, crypt, database.UserLink{
 			UserID:            user.ID,
@@ -33,13 +33,13 @@ func TestUserLinks(t *testing.T) {
 
 		link, err := db.GetUserLinkByLinkedID(ctx, link.LinkedID)
 		require.NoError(t, err)
-		requireEncryptedEquals(t, cipher, link.OAuthAccessToken, "access")
-		requireEncryptedEquals(t, cipher, link.OAuthRefreshToken, "refresh")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthAccessToken, "access")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthRefreshToken, "refresh")
 	})
 
 	t.Run("UpdateUserLink", func(t *testing.T) {
 		t.Parallel()
-		db, crypt, cipher := setup(t)
+		db, crypt, ciphers := setup(t)
 		user := dbgen.User(t, crypt, database.User{})
 		link := dbgen.UserLink(t, crypt, database.UserLink{
 			UserID: user.ID,
@@ -56,13 +56,13 @@ func TestUserLinks(t *testing.T) {
 
 		link, err = db.GetUserLinkByLinkedID(ctx, link.LinkedID)
 		require.NoError(t, err)
-		requireEncryptedEquals(t, cipher, link.OAuthAccessToken, "access")
-		requireEncryptedEquals(t, cipher, link.OAuthRefreshToken, "refresh")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthAccessToken, "access")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthRefreshToken, "refresh")
 	})
 
 	t.Run("GetUserLinkByLinkedID", func(t *testing.T) {
 		t.Parallel()
-		db, crypt, cipher := setup(t)
+		db, crypt, ciphers := setup(t)
 		user := dbgen.User(t, crypt, database.User{})
 		link := dbgen.UserLink(t, crypt, database.UserLink{
 			UserID:            user.ID,
@@ -71,13 +71,13 @@ func TestUserLinks(t *testing.T) {
 		})
 		link, err := db.GetUserLinkByLinkedID(ctx, link.LinkedID)
 		require.NoError(t, err)
-		requireEncryptedEquals(t, cipher, link.OAuthAccessToken, "access")
-		requireEncryptedEquals(t, cipher, link.OAuthRefreshToken, "refresh")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthAccessToken, "access")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthRefreshToken, "refresh")
 	})
 
 	t.Run("GetUserLinkByUserIDLoginType", func(t *testing.T) {
 		t.Parallel()
-		db, crypt, cipher := setup(t)
+		db, crypt, ciphers := setup(t)
 		user := dbgen.User(t, crypt, database.User{})
 		link := dbgen.UserLink(t, crypt, database.UserLink{
 			UserID:            user.ID,
@@ -89,8 +89,8 @@ func TestUserLinks(t *testing.T) {
 			LoginType: link.LoginType,
 		})
 		require.NoError(t, err)
-		requireEncryptedEquals(t, cipher, link.OAuthAccessToken, "access")
-		requireEncryptedEquals(t, cipher, link.OAuthRefreshToken, "refresh")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthAccessToken, "access")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthRefreshToken, "refresh")
 	})
 }
 
@@ -100,7 +100,7 @@ func TestGitAuthLinks(t *testing.T) {
 
 	t.Run("InsertGitAuthLink", func(t *testing.T) {
 		t.Parallel()
-		db, crypt, cipher := setup(t)
+		db, crypt, ciphers := setup(t)
 		link := dbgen.GitAuthLink(t, crypt, database.GitAuthLink{
 			OAuthAccessToken:  "access",
 			OAuthRefreshToken: "refresh",
@@ -113,13 +113,13 @@ func TestGitAuthLinks(t *testing.T) {
 			UserID:     link.UserID,
 		})
 		require.NoError(t, err)
-		requireEncryptedEquals(t, cipher, link.OAuthAccessToken, "access")
-		requireEncryptedEquals(t, cipher, link.OAuthRefreshToken, "refresh")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthAccessToken, "access")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthRefreshToken, "refresh")
 	})
 
 	t.Run("UpdateGitAuthLink", func(t *testing.T) {
 		t.Parallel()
-		db, crypt, cipher := setup(t)
+		db, crypt, ciphers := setup(t)
 		link := dbgen.GitAuthLink(t, crypt, database.GitAuthLink{})
 		updated, err := crypt.UpdateGitAuthLink(ctx, database.UpdateGitAuthLinkParams{
 			ProviderID:        link.ProviderID,
@@ -136,13 +136,13 @@ func TestGitAuthLinks(t *testing.T) {
 			UserID:     link.UserID,
 		})
 		require.NoError(t, err)
-		requireEncryptedEquals(t, cipher, link.OAuthAccessToken, "access")
-		requireEncryptedEquals(t, cipher, link.OAuthRefreshToken, "refresh")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthAccessToken, "access")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthRefreshToken, "refresh")
 	})
 
 	t.Run("GetGitAuthLink", func(t *testing.T) {
 		t.Parallel()
-		db, crypt, cipher := setup(t)
+		db, crypt, ciphers := setup(t)
 		link := dbgen.GitAuthLink(t, crypt, database.GitAuthLink{
 			OAuthAccessToken:  "access",
 			OAuthRefreshToken: "refresh",
@@ -152,8 +152,8 @@ func TestGitAuthLinks(t *testing.T) {
 			ProviderID: link.ProviderID,
 		})
 		require.NoError(t, err)
-		requireEncryptedEquals(t, cipher, link.OAuthAccessToken, "access")
-		requireEncryptedEquals(t, cipher, link.OAuthRefreshToken, "refresh")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthAccessToken, "access")
+		requireEncryptedEquals(t, ciphers[0], link.OAuthRefreshToken, "refresh")
 	})
 }
 
@@ -163,24 +163,26 @@ func TestNew(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		t.Parallel()
 		// Given: a cipher is loaded
-		cipher := ciphers(initCipher(t))
+		cipher := initCipher(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 		rawDB, _ := dbtestutil.NewDB(t)
 
+		// Before: no keys should be present
+		keys, err := rawDB.GetActiveDBCryptKeys(ctx)
+		require.Empty(t, keys, "no keys should be present")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+
 		// When: we init the crypt db
-		cryptDB, err := New(ctx, rawDB, cipher)
+		_, err = New(ctx, rawDB, cipher)
 		require.NoError(t, err)
 
-		// Then: the sentinel value is encrypted
-		cryptVal, err := cryptDB.GetDBCryptSentinelValue(ctx)
+		// Then: a new key is inserted
+		keys, err = rawDB.GetActiveDBCryptKeys(ctx)
 		require.NoError(t, err)
-		require.Equal(t, "coder", cryptVal)
-
-		rawVal, err := rawDB.GetDBCryptSentinelValue(ctx)
-		require.NoError(t, err)
-		require.Contains(t, rawVal, MagicPrefix)
-		requireEncryptedEquals(t, cipher, rawVal, "coder")
+		require.Len(t, keys, 1, "one key should be present")
+		require.Equal(t, cipher.HexDigest(), keys[0].ActiveKeyDigest, "key digest mismatch")
+		require.Equal(t, "coder", keys[0].Test, "test value mismatch")
 	})
 
 	t.Run("NoCipher", func(t *testing.T) {
@@ -190,14 +192,19 @@ func TestNew(t *testing.T) {
 		t.Cleanup(cancel)
 		rawDB, _ := dbtestutil.NewDB(t)
 
-		// When: we init the crypt db
-		_, err := New(ctx, rawDB, nil)
+		keys, err := rawDB.GetActiveDBCryptKeys(ctx)
+		require.Empty(t, keys, "no keys should be present")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+
+		// When: we init the crypt db with no ciphers
+		cs := make([]Cipher, 0)
+		_, err = New(ctx, rawDB, cs...)
 
 		// Then: an error is returned
 		require.ErrorContains(t, err, "no ciphers configured")
 
-		// And: the sentinel value is not present
-		_, err = rawDB.GetDBCryptSentinelValue(ctx)
+		// Assert invariant: no keys are inserted
+		require.Empty(t, keys)
 		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
 
@@ -208,47 +215,37 @@ func TestNew(t *testing.T) {
 		t.Cleanup(cancel)
 		rawDB, _ := dbtestutil.NewDB(t)
 
-		// And: the sentinel value is encrypted with a different cipher
-		cipher1 := initCipher(t)
-		field := sentinelValue
-		encrypted, err := ciphers(cipher1).Encrypt([]byte(field))
+		// Given: a key with a different cipher is inserted
+		// Simulation: this will just be random data
+		bs := make([]byte, 16)
+		_, err := io.ReadFull(rand.Reader, bs)
 		require.NoError(t, err)
-		b64encrypted := base64.StdEncoding.EncodeToString(encrypted)
-		require.NoError(t, rawDB.SetDBCryptSentinelValue(ctx, MagicPrefix+b64encrypted))
+		b64encrypted := base64.StdEncoding.EncodeToString(bs)
+		require.NoError(t, rawDB.InsertDBCryptKey(ctx, database.InsertDBCryptKeyParams{
+			Number:          1,
+			ActiveKeyDigest: "deadbeef",
+			Test:            b64encrypted,
+		}))
 
 		// When: we init the crypt db with no access to the old cipher
-		cipher2 := initCipher(t)
-		_, err = New(ctx, rawDB, ciphers(cipher2))
+		cipher1 := initCipher(t)
+		_, err = New(ctx, rawDB, cipher1)
 		// Then: a special error is returned
 		var derr *DecryptFailedError
 		require.ErrorAs(t, err, &derr)
 
 		// And the sentinel value should remain unchanged. For now.
-		rawVal, err := rawDB.GetDBCryptSentinelValue(ctx)
+		keys, err := rawDB.GetActiveDBCryptKeys(ctx)
 		require.NoError(t, err)
-		requireEncryptedEquals(t, ciphers(cipher1), rawVal, field)
-
-		// When: we set the secondary cipher
-		cs := ciphers(cipher2, cipher1)
-		_, err = New(ctx, rawDB, cs)
-		// Then: no error is returned
-		require.NoError(t, err)
-
-		// And the sentinel value should be re-encrypted with the new value.
-		rawVal, err = rawDB.GetDBCryptSentinelValue(ctx)
-		require.NoError(t, err)
-		requireEncryptedEquals(t, ciphers(cipher2), rawVal, field)
+		require.Len(t, keys, 1, "one key should be present")
+		require.Equal(t, "deadbeef", keys[0].ActiveKeyDigest.String, "key digest mismatch")
 	})
 }
 
 func requireEncryptedEquals(t *testing.T, c Cipher, value, expected string) {
 	t.Helper()
-	require.Greater(t, len(value), 8, "value is not encrypted")
-	require.Equal(t, MagicPrefix, value[:8], "missing magic prefix")
-	data, err := base64.StdEncoding.DecodeString(value[8:])
+	data, err := base64.StdEncoding.DecodeString(value)
 	require.NoError(t, err, "invalid base64")
-	require.Greater(t, len(data), 8, "missing cipher digest")
-	require.Equal(t, c.HexDigest(), string(data[:7]), "cipher digest mismatch")
 	got, err := c.Decrypt(data)
 	require.NoError(t, err, "failed to decrypt data")
 	require.Equal(t, expected, string(got), "decrypted data does not match")
@@ -264,26 +261,15 @@ func initCipher(t *testing.T) *aes256 {
 	return c
 }
 
-func setup(t *testing.T) (db, cryptodb database.Store, cs *Ciphers) {
+func setup(t *testing.T) (db, cryptodb database.Store, cs []Cipher) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	rawDB, _ := dbtestutil.NewDB(t)
 
-	_, err := rawDB.GetDBCryptSentinelValue(ctx)
-	require.ErrorIs(t, err, sql.ErrNoRows)
-
-	cs = ciphers(initCipher(t))
-	cryptDB, err := New(ctx, rawDB, cs)
+	cs = append(cs, initCipher(t))
+	cryptDB, err := New(ctx, rawDB, cs...)
 	require.NoError(t, err)
-
-	rawVal, err := rawDB.GetDBCryptSentinelValue(ctx)
-	require.NoError(t, err)
-	require.Contains(t, rawVal, MagicPrefix)
-
-	cryptVal, err := cryptDB.GetDBCryptSentinelValue(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "coder", cryptVal)
 
 	return rawDB, cryptDB, cs
 }

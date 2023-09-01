@@ -230,6 +230,13 @@ func (m metricsStore) GetAPIKeysLastUsedAfter(ctx context.Context, lastUsed time
 	return apiKeys, err
 }
 
+func (m metricsStore) GetActiveDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetActiveDBCryptKeys(ctx)
+	m.queryLatencies.WithLabelValues("GetActiveDBCryptKeys").Observe(time.Since(start).Seconds())
+	return r0, r1
+}
+
 func (m metricsStore) GetActiveUserCount(ctx context.Context) (int64, error) {
 	start := time.Now()
 	count, err := m.s.GetActiveUserCount(ctx)
@@ -277,13 +284,6 @@ func (m metricsStore) GetAuthorizationUserRoles(ctx context.Context, userID uuid
 	row, err := m.s.GetAuthorizationUserRoles(ctx, userID)
 	m.queryLatencies.WithLabelValues("GetAuthorizationUserRoles").Observe(time.Since(start).Seconds())
 	return row, err
-}
-
-func (m metricsStore) GetDBCryptSentinelValue(ctx context.Context) (string, error) {
-	start := time.Now()
-	r0, r1 := m.s.GetDBCryptSentinelValue(ctx)
-	m.queryLatencies.WithLabelValues("GetDBCryptSentinelValue").Observe(time.Since(start).Seconds())
-	return r0, r1
 }
 
 func (m metricsStore) GetDERPMeshKey(ctx context.Context) (string, error) {
@@ -1089,6 +1089,13 @@ func (m metricsStore) InsertAuditLog(ctx context.Context, arg database.InsertAud
 	return log, err
 }
 
+func (m metricsStore) InsertDBCryptKey(ctx context.Context, arg database.InsertDBCryptKeyParams) error {
+	start := time.Now()
+	r0 := m.s.InsertDBCryptKey(ctx, arg)
+	m.queryLatencies.WithLabelValues("InsertDBCryptKey").Observe(time.Since(start).Seconds())
+	return r0
+}
+
 func (m metricsStore) InsertDERPMeshKey(ctx context.Context, value string) error {
 	start := time.Now()
 	err := m.s.InsertDERPMeshKey(ctx, value)
@@ -1341,10 +1348,10 @@ func (m metricsStore) RegisterWorkspaceProxy(ctx context.Context, arg database.R
 	return proxy, err
 }
 
-func (m metricsStore) SetDBCryptSentinelValue(ctx context.Context, value string) error {
+func (m metricsStore) RevokeDBCryptKey(ctx context.Context, activeKeyDigest string) error {
 	start := time.Now()
-	r0 := m.s.SetDBCryptSentinelValue(ctx, value)
-	m.queryLatencies.WithLabelValues("SetDBCryptSentinelValue").Observe(time.Since(start).Seconds())
+	r0 := m.s.RevokeDBCryptKey(ctx, activeKeyDigest)
+	m.queryLatencies.WithLabelValues("RevokeDBCryptKey").Observe(time.Since(start).Seconds())
 	return r0
 }
 

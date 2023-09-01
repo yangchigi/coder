@@ -64,56 +64,6 @@ func TestCipherAES256(t *testing.T) {
 	})
 }
 
-func TestCiphers(t *testing.T) {
-	t.Parallel()
-
-	// Given: two ciphers
-	key1 := bytes.Repeat([]byte{'a'}, 32)
-	key2 := bytes.Repeat([]byte{'b'}, 32)
-	cipher1, err := cipherAES256(key1)
-	require.NoError(t, err)
-	cipher2, err := cipherAES256(key2)
-	require.NoError(t, err)
-
-	cs := ciphers(cipher1, cipher2)
-	require.NoError(t, err)
-
-	// Then: it should encrypt with the cipher1
-	output, err := cs.Encrypt([]byte("hello world"))
-	require.NoError(t, err)
-	// The first 7 bytes of the output should be the hex digest of cipher1
-	require.Equal(t, cipher1.HexDigest(), string(output[:7]))
-
-	// And: it should decrypt successfully
-	decrypted, err := cs.Decrypt(output)
-	require.NoError(t, err)
-	require.Equal(t, "hello world", string(decrypted))
-
-	// Decryption of the above should fail with cipher2
-	_, err = cipher2.Decrypt(output)
-	var decryptErr *DecryptFailedError
-	require.ErrorAs(t, err, &decryptErr)
-
-	// Decryption of data encrypted with cipher2 should succeed
-	output2, err := cipher2.Encrypt([]byte("hello world"))
-	require.NoError(t, err)
-	decrypted2, err := cs.Decrypt(bytes.Join([][]byte{[]byte(cipher2.HexDigest()), output2}, []byte{'-'}))
-	require.NoError(t, err)
-	require.Equal(t, "hello world", string(decrypted2))
-
-	// Decryption of data encrypted with cipher1 should succeed
-	output1, err := cipher1.Encrypt([]byte("hello world"))
-	require.NoError(t, err)
-	decrypted1, err := cs.Decrypt(bytes.Join([][]byte{[]byte(cipher1.HexDigest()), output1}, []byte{'-'}))
-	require.NoError(t, err)
-	require.Equal(t, "hello world", string(decrypted1))
-
-	// Wrapping a Ciphers with itself should panic.
-	require.PanicsWithValue(t, "developer error: do not nest Ciphers", func() {
-		_ = ciphers(cs)
-	})
-}
-
 // This test ensures backwards compatibility. If it breaks, something is very wrong.
 func TestCiphersBackwardCompatibility(t *testing.T) {
 	t.Parallel()
@@ -126,18 +76,16 @@ func TestCiphersBackwardCompatibility(t *testing.T) {
 
 	cipher, err := cipherAES256(key)
 	require.NoError(t, err)
-	require.Equal(t, "864f702", cipher.HexDigest())
-	cs := ciphers(cipher)
 
 	// This is the code that was used to generate the above.
 	// Note that the output of this code will change every time it is run.
-	// encrypted, err := cs.Encrypt([]byte(msg))
+	// encrypted, err := cipher.Encrypt([]byte(msg))
 	// require.NoError(t, err)
 	// t.Logf("encoded: %q", base64.StdEncoding.EncodeToString(encrypted))
 
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	require.NoError(t, err, "the encoded string should be valid base64")
-	decrypted, err := cs.Decrypt(decoded)
+	decrypted, err := cipher.Decrypt(decoded)
 	require.NoError(t, err, "decryption should succeed")
 	require.Equal(t, msg, string(decrypted), "decrypted message should match original message")
 }

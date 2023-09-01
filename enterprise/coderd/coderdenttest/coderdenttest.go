@@ -58,7 +58,7 @@ type Options struct {
 	DontAddLicense              bool
 	DontAddFirstUser            bool
 	ReplicaSyncUpdateInterval   time.Duration
-	ExternalTokenEncryption     *dbcrypt.Ciphers
+	ExternalTokenEncryption     []dbcrypt.Cipher
 	ProvisionerDaemonPSK        string
 }
 

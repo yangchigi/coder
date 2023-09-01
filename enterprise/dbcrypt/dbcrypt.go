@@ -1,32 +1,11 @@
-// Package dbcrypt provides a database.Store wrapper that encrypts/decrypts
-// values stored at rest in the database.
-//
-// Encryption is done using a Cipher. The Cipher is stored in an atomic pointer
-// so that it can be rotated as required.
-//
-// The Cipher is currently used to encrypt/decrypt the following fields:
-// - database.UserLink.OAuthAccessToken
-// - database.UserLink.OAuthRefreshToken
-// - database.GitAuthLink.OAuthAccessToken
-// - database.GitAuthLink.OAuthRefreshToken
-// - database.DBCryptSentinelValue
-//
-// Encrypted fields are stored in the following format:
-// "dbcrypt-${b64encode(<first 7 digits of cipher's SHA256 digest>-<encrypted value>)}"
-//
-// The first 7 characters of the cipher's SHA256 digest are used to identify the cipher
-// used to encrypt the value.
-//
-// Multiple ciphers can be provided to support key rotation. The primary cipher is used
-// to encrypt and decrypt all data. Secondary ciphers are only used for decryption.
-// We currently only use a single secondary cipher.
 package dbcrypt
 
 import (
 	"context"
 	"database/sql"
 	"encoding/base64"
-	"strings"
+
+	"github.com/lib/pq"
 
 	"github.com/coder/coder/v2/coderd/database"
 	"github.com/coder/coder/v2/coderd/database/dbauthz"
@@ -35,20 +14,9 @@ import (
 	"golang.org/x/xerrors"
 )
 
-// MagicPrefix is prepended to all encrypted values in the database.
-// This is used to determine if a value is encrypted or not.
-// If it is encrypted but a key is not provided, an error is returned.
-// MagicPrefix will be followed by the first 7 characters of the cipher's
-// SHA256 digest, followed by a dash, followed by the base64-encoded
-// encrypted value.
-const MagicPrefix = "dbcrypt-"
-
-// sentinelValue is the value that is stored in the database to indicate
-// whether encryption is enabled. If not enabled, the value either not
-// present, or is the raw string "coder".
-// Otherwise, the value must be the encrypted value of the string "coder"
-// using the current cipher.
-const sentinelValue = "coder"
+// testValue is the value that is stored in dbcrypt_keys.test.
+// This is used to determine if the key is valid.
+const testValue = "coder"
 
 var (
 	ErrNotEnabled = xerrors.New("encryption is not enabled")
@@ -67,44 +35,72 @@ func (e *DecryptFailedError) Error() string {
 
 // New creates a database.Store wrapper that encrypts/decrypts values
 // stored at rest in the database.
-func New(ctx context.Context, db database.Store, cs *Ciphers) (database.Store, error) {
-	if cs == nil {
+func New(ctx context.Context, db database.Store, ciphers ...Cipher) (database.Store, error) {
+	if len(ciphers) == 0 {
 		return nil, xerrors.Errorf("no ciphers configured")
 	}
+	cm := make(map[string]Cipher)
+	for _, c := range ciphers {
+		cm[c.HexDigest()] = c
+	}
 	dbc := &dbCrypt{
-		ciphers: cs,
-		Store:   db,
+		primaryCipherDigest: ciphers[0].HexDigest(),
+		ciphers:             cm,
+		Store:               db,
 	}
 	// nolint: gocritic // This is allowed.
-	if err := ensureEncrypted(dbauthz.AsSystemRestricted(ctx), dbc); err != nil {
+	if err := dbc.ensureEncrypted(dbauthz.AsSystemRestricted(ctx)); err != nil {
 		return nil, xerrors.Errorf("ensure encrypted database fields: %w", err)
 	}
 	return dbc, nil
 }
 
 type dbCrypt struct {
-	ciphers *Ciphers
+	// primaryCipherDigest is the digest of the primary cipher used for encrypting data.
+	primaryCipherDigest string
+	// ciphers is a map of cipher digests to ciphers.
+	ciphers map[string]Cipher
 	database.Store
 }
 
 func (db *dbCrypt) InTx(function func(database.Store) error, txOpts *sql.TxOptions) error {
 	return db.Store.InTx(func(s database.Store) error {
 		return function(&dbCrypt{
-			ciphers: db.ciphers,
-			Store:   s,
+			primaryCipherDigest: db.primaryCipherDigest,
+			ciphers:             db.ciphers,
+			Store:               s,
 		})
 	}, txOpts)
 }
 
-func (db *dbCrypt) GetDBCryptSentinelValue(ctx context.Context) (string, error) {
-	rawValue, err := db.Store.GetDBCryptSentinelValue(ctx)
+func (db *dbCrypt) GetActiveDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
+	ks, err := db.Store.GetActiveDBCryptKeys(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if err := db.decryptFields(&rawValue); err != nil {
-		return "", err
+	// Decrypt the test field to ensure that the key is valid.
+	for i := range ks {
+		if !ks[i].ActiveKeyDigest.Valid {
+			continue
+		}
+		if err := db.decryptField(&ks[i].Test, ks[i].ActiveKeyDigest.String); err != nil {
+			return nil, err
+		}
 	}
-	return rawValue, nil
+	return ks, nil
+}
+
+// This does not need any special handling as it does not touch any encrypted fields.
+func (db *dbCrypt) RevokeDBCryptKey(ctx context.Context, activeKeyDigest string) error {
+	return db.Store.RevokeDBCryptKey(ctx, activeKeyDigest)
+}
+
+func (db *dbCrypt) InsertDBCryptKey(ctx context.Context, arg database.InsertDBCryptKeyParams) error {
+	err := db.encryptFields(&arg.Test)
+	if err != nil {
+		return err
+	}
+	return db.Store.InsertDBCryptKey(ctx, arg)
 }
 
 func (db *dbCrypt) GetUserLinkByLinkedID(ctx context.Context, linkedID string) (database.UserLink, error) {
@@ -112,7 +108,13 @@ func (db *dbCrypt) GetUserLinkByLinkedID(ctx context.Context, linkedID string) (
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	return link, db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken)
+	if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
+		return database.UserLink{}, err
+	}
+	if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
+		return database.UserLink{}, err
+	}
+	return link, nil
 }
 
 func (db *dbCrypt) GetUserLinksByUserID(ctx context.Context, userID uuid.UUID) ([]database.UserLink, error) {
@@ -121,7 +123,10 @@ func (db *dbCrypt) GetUserLinksByUserID(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	for _, link := range links {
-		if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+		if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
+			return nil, err
+		}
+		if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
 			return nil, err
 		}
 	}
@@ -133,7 +138,10 @@ func (db *dbCrypt) GetUserLinkByUserIDLoginType(ctx context.Context, params data
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+	if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
+		return database.UserLink{}, err
+	}
+	if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
 		return database.UserLink{}, err
 	}
 	return link, nil
@@ -144,11 +152,16 @@ func (db *dbCrypt) InsertUserLink(ctx context.Context, params database.InsertUse
 	if err != nil {
 		return database.UserLink{}, err
 	}
+	params.OAuthAccessTokenKeyID = sql.NullString{String: db.primaryCipherDigest, Valid: true}
+	params.OAuthRefreshTokenKeyID = sql.NullString{String: db.primaryCipherDigest, Valid: true}
 	link, err := db.Store.InsertUserLink(ctx, params)
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+	if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
+		return database.UserLink{}, err
+	}
+	if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
 		return database.UserLink{}, err
 	}
 	return link, nil
@@ -159,14 +172,17 @@ func (db *dbCrypt) UpdateUserLink(ctx context.Context, params database.UpdateUse
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	updated, err := db.Store.UpdateUserLink(ctx, params)
+	link, err := db.Store.UpdateUserLink(ctx, params)
 	if err != nil {
 		return database.UserLink{}, err
 	}
-	if err := db.decryptFields(&updated.OAuthAccessToken, &updated.OAuthRefreshToken); err != nil {
+	if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
 		return database.UserLink{}, err
 	}
-	return updated, nil
+	if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
+		return database.UserLink{}, err
+	}
+	return link, nil
 }
 
 func (db *dbCrypt) InsertGitAuthLink(ctx context.Context, params database.InsertGitAuthLinkParams) (database.GitAuthLink, error) {
@@ -178,7 +194,10 @@ func (db *dbCrypt) InsertGitAuthLink(ctx context.Context, params database.Insert
 	if err != nil {
 		return database.GitAuthLink{}, err
 	}
-	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+	if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
+		return database.GitAuthLink{}, err
+	}
+	if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
 		return database.GitAuthLink{}, err
 	}
 	return link, nil
@@ -189,7 +208,10 @@ func (db *dbCrypt) GetGitAuthLink(ctx context.Context, params database.GetGitAut
 	if err != nil {
 		return database.GitAuthLink{}, err
 	}
-	if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+	if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
+		return database.GitAuthLink{}, err
+	}
+	if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
 		return database.GitAuthLink{}, err
 	}
 	return link, nil
@@ -201,7 +223,10 @@ func (db *dbCrypt) GetGitAuthLinksByUserID(ctx context.Context, userID uuid.UUID
 		return nil, err
 	}
 	for _, link := range links {
-		if err := db.decryptFields(&link.OAuthAccessToken, &link.OAuthRefreshToken); err != nil {
+		if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
+			return nil, err
+		}
+		if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
 			return nil, err
 		}
 	}
@@ -213,22 +238,17 @@ func (db *dbCrypt) UpdateGitAuthLink(ctx context.Context, params database.Update
 	if err != nil {
 		return database.GitAuthLink{}, err
 	}
-	updated, err := db.Store.UpdateGitAuthLink(ctx, params)
+	link, err := db.Store.UpdateGitAuthLink(ctx, params)
 	if err != nil {
 		return database.GitAuthLink{}, err
 	}
-	if err := db.decryptFields(&updated.OAuthAccessToken, &updated.OAuthRefreshToken); err != nil {
+	if err := db.decryptField(&link.OAuthAccessToken, link.OAuthAccessTokenKeyID.String); err != nil {
 		return database.GitAuthLink{}, err
 	}
-	return updated, nil
-}
-
-func (db *dbCrypt) SetDBCryptSentinelValue(ctx context.Context, value string) error {
-	err := db.encryptFields(&value)
-	if err != nil {
-		return err
+	if err := db.decryptField(&link.OAuthRefreshToken, link.OAuthRefreshTokenKeyID.String); err != nil {
+		return database.GitAuthLink{}, err
 	}
-	return db.Store.SetDBCryptSentinelValue(ctx, value)
+	return link, nil
 }
 
 func (db *dbCrypt) encryptFields(fields ...*string) error {
@@ -242,77 +262,98 @@ func (db *dbCrypt) encryptFields(fields ...*string) error {
 			continue
 		}
 
-		encrypted, err := db.ciphers.Encrypt([]byte(*field))
+		encrypted, err := db.ciphers[db.primaryCipherDigest].Encrypt([]byte(*field))
 		if err != nil {
 			return err
 		}
 		// Base64 is used to support UTF-8 encoding in PostgreSQL.
-		*field = MagicPrefix + b64encode(encrypted)
+		*field = b64encode(encrypted)
 	}
 	return nil
 }
 
-// decryptFields decrypts the given fields in place.
+// decryptFields decrypts the given field using the key with the given digest.
 // If the value fails to decrypt, sql.ErrNoRows will be returned.
-func (db *dbCrypt) decryptFields(fields ...*string) error {
+func (db *dbCrypt) decryptField(field *string, digest string) error {
 	if db.ciphers == nil {
 		return ErrNotEnabled
 	}
 
-	for _, field := range fields {
-		if field == nil {
-			continue
-		}
-
-		if len(*field) < 8 || !strings.HasPrefix(*field, MagicPrefix) {
-			// We do not force decryption of unencrypted rows. This could be damaging
-			// to the deployment, and admins can always manually purge data.
-			continue
-		}
-
-		data, err := b64decode((*field)[8:])
-		if err != nil {
-			// If it's not base64 with the prefix, we should complain loudly.
+	if field == nil || len(*field) == 0 {
+		if digest != "" {
+			// We've been asked to decrypt a field that is empty.
+			// There is a digest present, so it should have been encrypted,
+			// which would have produced a non-empty value.
+			// If we return sql.ErrNoRows, then the caller will assume that
+			// the value is not present in the database, which is not true.
+			// Return a DecryptFailedError to indicate that there is a value
+			// present, but it could not be decrypted.
+			// Unfortunately the only real way to fix this is to mark this
+			// field as not encrypted in the database. We do not want to
+			// silently do this, as it would mask a real problem.
 			return &DecryptFailedError{
-				Inner: xerrors.Errorf("malformed encrypted field %q: %w", *field, err),
+				Inner: xerrors.Errorf("unexpected empty encrypted field with digest %q", digest),
 			}
 		}
-		decrypted, err := db.ciphers.Decrypt(data)
-		if err != nil {
-			// If the encryption key changed, return our special error that unwraps to sql.ErrNoRows.
-			return &DecryptFailedError{Inner: err}
-		}
-		*field = string(decrypted)
+
+		return nil
 	}
+
+	key, ok := db.ciphers[digest]
+	if !ok {
+		return &DecryptFailedError{
+			Inner: xerrors.Errorf("no cipher with digest %q", digest),
+		}
+	}
+
+	data, err := b64decode(*field)
+	if err != nil {
+		// If it's not valid base64, we should complain loudly.
+		return &DecryptFailedError{
+			Inner: xerrors.Errorf("malformed encrypted field %q: %w", *field, err),
+		}
+	}
+	decrypted, err := key.Decrypt(data)
+	if err != nil {
+		return &DecryptFailedError{Inner: err}
+	}
+	*field = string(decrypted)
 	return nil
 }
 
-func ensureEncrypted(ctx context.Context, dbc *dbCrypt) error {
-	// The purpose of this function is to ensure that coder is not started
-	// against a database that has been encrypted with a different key.
-	// We perform this in a transaction with repeatable read isolation as
-	// there may be multiple coder instances running against the same database.
-	// There are four possible states:
-	// ---------------------------------------------------------------------------------------------------
-	// | # | Value | Error              | Action                        | Meaning									       |
-	// ---------------------------------------------------------------------------------------------------
-	// | 1 | "..." | nil                | Write encrypted sentinelValue | Maybe encrypted with known key |
-	// | 2 | ""    | ErrNoRows          | Write encrypted sentinelValue | Not encrypted                  |
-	// | 3 | ""    | DecryptFailedError | Return error                  | Encrypted with unknown key     |
-	// | 4 | ""    | other error        | Return error                  | Some other error               |
-	// ---------------------------------------------------------------------------------------------------
-	return dbc.InTx(func(s database.Store) error {
-		_, err := s.GetDBCryptSentinelValue(ctx)
-		if err != nil && !xerrors.Is(err, sql.ErrNoRows) {
-			return err // Case 3 or 4
+func (db *dbCrypt) ensureEncrypted(ctx context.Context) error {
+	return db.InTx(func(s database.Store) error {
+		// Attempt to read the encrypted test fields of the currently active keys.
+		ks, err := s.GetActiveDBCryptKeys(ctx)
+		if err != nil {
+			return err
 		}
 
-		// We don't really care about the value, just that we can decrypt it.
-		// If we got this far, it could be case 1 or 2. Being able to decrypt
-		// the value doesn't necessarily tell us it was encrypted with the current
-		// primary cipher, so we need to re-encrypt the value in any case.
-		if err := s.SetDBCryptSentinelValue(ctx, sentinelValue); err != nil {
-			return xerrors.Errorf("mark database as encrypted: %w", err)
+		var highestNumber int32
+		for _, k := range ks {
+			if k.Number > highestNumber {
+				highestNumber = k.Number
+			}
+			if k.ActiveKeyDigest.String == db.primaryCipherDigest {
+				// This is our currently active key. We don't need to do anything further.
+				return nil
+			}
+		}
+
+		// If we get here, then we have a new key that we need to insert.
+		// If this conflicts with another transaction, we do not need to retry as
+		// the other transaction will have inserted the key for us.
+		if err := db.InsertDBCryptKey(ctx, database.InsertDBCryptKeyParams{
+			Number:          highestNumber + 1,
+			ActiveKeyDigest: db.primaryCipherDigest,
+			Test:            testValue,
+		}); err != nil {
+			var pqErr *pq.Error
+			if xerrors.As(err, &pqErr) && pqErr.Code == "23505" {
+				// Unique constraint violation -> another transaction has inserted the key for us.
+				return nil
+			}
+			return err
 		}
 
 		return nil

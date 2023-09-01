@@ -64,7 +64,7 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
 	ctx, cancelFunc := context.WithCancel(ctx)
 
 	if options.ExternalTokenEncryption != nil {
-		cryptDB, err := dbcrypt.New(ctx, options.Database, options.ExternalTokenEncryption)
+		cryptDB, err := dbcrypt.New(ctx, options.Database, options.ExternalTokenEncryption...)
 		if err != nil {
 			cancelFunc()
 			// If we fail to initialize the database, it's likely that the
@@ -381,7 +381,7 @@ type Options struct {
 	BrowserOnly bool
 	SCIMAPIKey  []byte
 
-	ExternalTokenEncryption *dbcrypt.Ciphers
+	ExternalTokenEncryption []dbcrypt.Cipher
 
 	// Used for high availability.
 	ReplicaSyncUpdateInterval time.Duration

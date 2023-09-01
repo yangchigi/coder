@@ -356,6 +356,21 @@ func (mr *MockStoreMockRecorder) GetAPIKeysLastUsedAfter(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAPIKeysLastUsedAfter", reflect.TypeOf((*MockStore)(nil).GetAPIKeysLastUsedAfter), arg0, arg1)
 }
 
+// GetActiveDBCryptKeys mocks base method.
+func (m *MockStore) GetActiveDBCryptKeys(arg0 context.Context) ([]database.DBCryptKey, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveDBCryptKeys", arg0)
+	ret0, _ := ret[0].([]database.DBCryptKey)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveDBCryptKeys indicates an expected call of GetActiveDBCryptKeys.
+func (mr *MockStoreMockRecorder) GetActiveDBCryptKeys(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveDBCryptKeys", reflect.TypeOf((*MockStore)(nil).GetActiveDBCryptKeys), arg0)
+}
+
 // GetActiveUserCount mocks base method.
 func (m *MockStore) GetActiveUserCount(arg0 context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -504,21 +519,6 @@ func (m *MockStore) GetAuthorizedWorkspaces(arg0 context.Context, arg1 database.
 func (mr *MockStoreMockRecorder) GetAuthorizedWorkspaces(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAuthorizedWorkspaces", reflect.TypeOf((*MockStore)(nil).GetAuthorizedWorkspaces), arg0, arg1, arg2)
-}
-
-// GetDBCryptSentinelValue mocks base method.
-func (m *MockStore) GetDBCryptSentinelValue(arg0 context.Context) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDBCryptSentinelValue", arg0)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDBCryptSentinelValue indicates an expected call of GetDBCryptSentinelValue.
-func (mr *MockStoreMockRecorder) GetDBCryptSentinelValue(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDBCryptSentinelValue", reflect.TypeOf((*MockStore)(nil).GetDBCryptSentinelValue), arg0)
 }
 
 // GetDERPMeshKey mocks base method.
@@ -2290,6 +2290,20 @@ func (mr *MockStoreMockRecorder) InsertAuditLog(arg0, arg1 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertAuditLog", reflect.TypeOf((*MockStore)(nil).InsertAuditLog), arg0, arg1)
 }
 
+// InsertDBCryptKey mocks base method.
+func (m *MockStore) InsertDBCryptKey(arg0 context.Context, arg1 database.InsertDBCryptKeyParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertDBCryptKey", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertDBCryptKey indicates an expected call of InsertDBCryptKey.
+func (mr *MockStoreMockRecorder) InsertDBCryptKey(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertDBCryptKey", reflect.TypeOf((*MockStore)(nil).InsertDBCryptKey), arg0, arg1)
+}
+
 // InsertDERPMeshKey mocks base method.
 func (m *MockStore) InsertDERPMeshKey(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
@@ -2834,18 +2848,18 @@ func (mr *MockStoreMockRecorder) RegisterWorkspaceProxy(arg0, arg1 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkspaceProxy", reflect.TypeOf((*MockStore)(nil).RegisterWorkspaceProxy), arg0, arg1)
 }
 
-// SetDBCryptSentinelValue mocks base method.
-func (m *MockStore) SetDBCryptSentinelValue(arg0 context.Context, arg1 string) error {
+// RevokeDBCryptKey mocks base method.
+func (m *MockStore) RevokeDBCryptKey(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetDBCryptSentinelValue", arg0, arg1)
+	ret := m.ctrl.Call(m, "RevokeDBCryptKey", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SetDBCryptSentinelValue indicates an expected call of SetDBCryptSentinelValue.
-func (mr *MockStoreMockRecorder) SetDBCryptSentinelValue(arg0, arg1 interface{}) *gomock.Call {
+// RevokeDBCryptKey indicates an expected call of RevokeDBCryptKey.
+func (mr *MockStoreMockRecorder) RevokeDBCryptKey(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDBCryptSentinelValue", reflect.TypeOf((*MockStore)(nil).SetDBCryptSentinelValue), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeDBCryptKey", reflect.TypeOf((*MockStore)(nil).RevokeDBCryptKey), arg0, arg1)
 }
 
 // TryAcquireLock mocks base method.

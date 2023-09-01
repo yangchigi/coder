@@ -777,6 +777,13 @@ func (q *querier) GetAPIKeysLastUsedAfter(ctx context.Context, lastUsed time.Tim
 	return fetchWithPostFilter(q.auth, q.db.GetAPIKeysLastUsedAfter)(ctx, lastUsed)
 }
 
+func (q *querier) GetActiveDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
+	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
+		return nil, err
+	}
+	return q.db.GetActiveDBCryptKeys(ctx)
+}
+
 func (q *querier) GetActiveUserCount(ctx context.Context) (int64, error) {
 	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
 		return 0, err
@@ -826,13 +833,6 @@ func (q *querier) GetAuthorizationUserRoles(ctx context.Context, userID uuid.UUI
 		return database.GetAuthorizationUserRolesRow{}, err
 	}
 	return q.db.GetAuthorizationUserRoles(ctx, userID)
-}
-
-func (q *querier) GetDBCryptSentinelValue(ctx context.Context) (string, error) {
-	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
-		return "", err
-	}
-	return q.db.GetDBCryptSentinelValue(ctx)
 }
 
 func (q *querier) GetDERPMeshKey(ctx context.Context) (string, error) {
@@ -1856,6 +1856,13 @@ func (q *querier) InsertAuditLog(ctx context.Context, arg database.InsertAuditLo
 	return insert(q.log, q.auth, rbac.ResourceAuditLog, q.db.InsertAuditLog)(ctx, arg)
 }
 
+func (q *querier) InsertDBCryptKey(ctx context.Context, arg database.InsertDBCryptKeyParams) error {
+	if err := q.authorizeContext(ctx, rbac.ActionCreate, rbac.ResourceSystem); err != nil {
+		return err
+	}
+	return q.db.InsertDBCryptKey(ctx, arg)
+}
+
 func (q *querier) InsertDERPMeshKey(ctx context.Context, value string) error {
 	if err := q.authorizeContext(ctx, rbac.ActionCreate, rbac.ResourceSystem); err != nil {
 		return err
@@ -2155,11 +2162,11 @@ func (q *querier) RegisterWorkspaceProxy(ctx context.Context, arg database.Regis
 	return updateWithReturn(q.log, q.auth, fetch, q.db.RegisterWorkspaceProxy)(ctx, arg)
 }
 
-func (q *querier) SetDBCryptSentinelValue(ctx context.Context, value string) error {
+func (q *querier) RevokeDBCryptKey(ctx context.Context, activeKeyDigest string) error {
 	if err := q.authorizeContext(ctx, rbac.ActionUpdate, rbac.ResourceSystem); err != nil {
 		return err
 	}
-	return q.db.SetDBCryptSentinelValue(ctx, value)
+	return q.db.RevokeDBCryptKey(ctx, activeKeyDigest)
 }
 
 func (q *querier) TryAcquireLock(ctx context.Context, id int64) (bool, error) {
