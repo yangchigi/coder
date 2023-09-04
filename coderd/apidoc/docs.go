@@ -7715,8 +7715,7 @@ const docTemplate = `{
         "codersdk.CreateWorkspaceRequest": {
             "type": "object",
             "required": [
-                "name",
-                "template_id"
+                "name"
             ],
             "properties": {
                 "autostart_schedule": {
@@ -7726,13 +7725,19 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rich_parameter_values": {
-                    "description": "ParameterValues allows for additional parameters to be provided\nduring the initial provision.",
+                    "description": "RichParameterValues allows for additional parameters to be provided\nduring the initial provision.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/codersdk.WorkspaceBuildParameter"
                     }
                 },
                 "template_id": {
+                    "description": "TemplateID specifies which template should be used for creating the workspace.",
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "template_version_id": {
+                    "description": "TemplateVersionID can be used to specify a specific version of a template for creating the workspace.",
                     "type": "string",
                     "format": "uuid"
                 },
@@ -8074,6 +8079,23 @@ const docTemplate = `{
                 }
             }
         },
+        "codersdk.DisplayApp": {
+            "type": "string",
+            "enum": [
+                "vscode",
+                "vscode_insiders",
+                "web_terminal",
+                "port_forwarding_helper",
+                "ssh_helper"
+            ],
+            "x-enum-varnames": [
+                "DisplayAppVSCodeDesktop",
+                "DisplayAppVSCodeInsiders",
+                "DisplayAppWebTerminal",
+                "DisplayAppPortForward",
+                "DisplayAppSSH"
+            ]
+        },
         "codersdk.Entitlement": {
             "type": "string",
             "enum": [
@@ -8131,8 +8153,7 @@ const docTemplate = `{
                 "tailnet_pg_coordinator",
                 "single_tailnet",
                 "template_autostop_requirement",
-                "deployment_health_page",
-                "workspaces_batch_actions"
+                "deployment_health_page"
             ],
             "x-enum-varnames": [
                 "ExperimentMoons",
@@ -8140,8 +8161,7 @@ const docTemplate = `{
                 "ExperimentTailnetPGCoordinator",
                 "ExperimentSingleTailnet",
                 "ExperimentTemplateAutostopRequirement",
-                "ExperimentDeploymentHealthPage",
-                "ExperimentWorkspacesBatchActions"
+                "ExperimentDeploymentHealthPage"
             ]
         },
         "codersdk.Feature": {
@@ -10619,6 +10639,12 @@ const docTemplate = `{
                     "type": "string",
                     "format": "date-time"
                 },
+                "display_apps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/codersdk.DisplayApp"
+                    }
+                },
                 "environment_variables": {
                     "type": "object",
                     "additionalProperties": {
@@ -11380,30 +11406,7 @@ const docTemplate = `{
                 }
             }
         },
-        "healthcheck.AccessURLReport": {
-            "type": "object",
-            "properties": {
-                "access_url": {
-                    "type": "string"
-                },
-                "error": {
-                    "type": "string"
-                },
-                "healthy": {
-                    "type": "boolean"
-                },
-                "healthz_response": {
-                    "type": "string"
-                },
-                "reachable": {
-                    "type": "boolean"
-                },
-                "status_code": {
-                    "type": "integer"
-                }
-            }
-        },
-        "healthcheck.DERPNodeReport": {
+        "derphealth.NodeReport": {
             "type": "object",
             "properties": {
                 "can_exchange_messages": {
@@ -11446,14 +11449,14 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "stun": {
-                    "$ref": "#/definitions/healthcheck.DERPStunReport"
+                    "$ref": "#/definitions/derphealth.StunReport"
                 },
                 "uses_websocket": {
                     "type": "boolean"
                 }
             }
         },
-        "healthcheck.DERPRegionReport": {
+        "derphealth.RegionReport": {
             "type": "object",
             "properties": {
                 "error": {
@@ -11465,7 +11468,7 @@ const docTemplate = `{
                 "node_reports": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/healthcheck.DERPNodeReport"
+                        "$ref": "#/definitions/derphealth.NodeReport"
                     }
                 },
                 "region": {
@@ -11473,7 +11476,7 @@ const docTemplate = `{
                 }
             }
         },
-        "healthcheck.DERPReport": {
+        "derphealth.Report": {
             "type": "object",
             "properties": {
                 "error": {
@@ -11497,12 +11500,12 @@ const docTemplate = `{
                 "regions": {
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/healthcheck.DERPRegionReport"
+                        "$ref": "#/definitions/derphealth.RegionReport"
                     }
                 }
             }
         },
-        "healthcheck.DERPStunReport": {
+        "derphealth.StunReport": {
             "type": "object",
             "properties": {
                 "canSTUN": {
@@ -11513,6 +11516,29 @@ const docTemplate = `{
                 },
                 "error": {
                     "type": "string"
+                }
+            }
+        },
+        "healthcheck.AccessURLReport": {
+            "type": "object",
+            "properties": {
+                "access_url": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "healthy": {
+                    "type": "boolean"
+                },
+                "healthz_response": {
+                    "type": "string"
+                },
+                "reachable": {
+                    "type": "boolean"
+                },
+                "status_code": {
+                    "type": "integer"
                 }
             }
         },
@@ -11550,7 +11576,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/healthcheck.DatabaseReport"
                 },
                 "derp": {
-                    "$ref": "#/definitions/healthcheck.DERPReport"
+                    "$ref": "#/definitions/derphealth.Report"
                 },
                 "failing_sections": {
                     "description": "FailingSections is a list of sections that have failed their healthcheck.",

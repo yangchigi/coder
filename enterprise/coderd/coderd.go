@@ -397,6 +397,8 @@ type Options struct {
 
 	// optional pre-shared key for authentication of external provisioner daemons
 	ProvisionerDaemonPSK string
+
+	CheckInactiveUsersCancelFunc func()
 }
 
 type API struct {
@@ -432,6 +434,10 @@ func (api *API) Close() error {
 	api.cancel()
 	if api.derpMesh != nil {
 		_ = api.derpMesh.Close()
+	}
+
+	if api.Options.CheckInactiveUsersCancelFunc != nil {
+		api.Options.CheckInactiveUsersCancelFunc()
 	}
 	return api.AGPL.Close()
 }

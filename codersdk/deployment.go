@@ -49,6 +49,7 @@ const (
 	FeatureWorkspaceProxy              FeatureName = "workspace_proxy"
 	FeatureExternalTokenEncryption     FeatureName = "external_token_encryption"
 	FeatureTemplateAutostopRequirement FeatureName = "template_autostop_requirement"
+	FeatureWorkspaceBatchActions       FeatureName = "workspace_batch_actions"
 )
 
 // FeatureNames must be kept in-sync with the Feature enum above.
@@ -67,6 +68,7 @@ var FeatureNames = []FeatureName{
 	FeatureUserRoleManagement,
 	FeatureExternalTokenEncryption,
 	FeatureTemplateAutostopRequirement,
+	FeatureWorkspaceBatchActions,
 }
 
 // Humanize returns the feature name in a human-readable format.
@@ -1969,9 +1971,6 @@ const (
 	// Deployment health page
 	ExperimentDeploymentHealthPage Experiment = "deployment_health_page"
 
-	// Workspaces batch actions
-	ExperimentWorkspacesBatchActions Experiment = "workspaces_batch_actions"
-
 	// Add new experiments here!
 	// ExperimentExample Experiment = "example"
 )
@@ -1982,7 +1981,6 @@ const (
 // not be included here and will be essentially hidden.
 var ExperimentsAll = Experiments{
 	ExperimentDeploymentHealthPage,
-	ExperimentWorkspacesBatchActions,
 }
 
 // Experiments is a list of experiments that are enabled for the deployment.

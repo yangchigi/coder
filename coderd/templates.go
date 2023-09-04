@@ -15,6 +15,7 @@ import (
 	"github.com/coder/coder/v2/coderd/audit"
 	"github.com/coder/coder/v2/coderd/database"
 	"github.com/coder/coder/v2/coderd/database/dbauthz"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
 	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/coderd/httpmw"
 	"github.com/coder/coder/v2/coderd/rbac"
@@ -87,7 +88,7 @@ func (api *API) deleteTemplate(rw http.ResponseWriter, r *http.Request) {
 	err = api.Database.UpdateTemplateDeletedByID(ctx, database.UpdateTemplateDeletedByIDParams{
 		ID:        template.ID,
 		Deleted:   true,
-		UpdatedAt: database.Now(),
+		UpdatedAt: dbtime.Now(),
 	})
 	if err != nil {
 		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
@@ -301,7 +302,7 @@ func (api *API) postTemplateByOrganization(rw http.ResponseWriter, r *http.Reque
 		defaultsGroups[organization.ID.String()] = []rbac.Action{rbac.ActionRead}
 	}
 	err = api.Database.InTx(func(tx database.Store) error {
-		now := database.Now()
+		now := dbtime.Now()
 		id := uuid.New()
 		err = tx.InsertTemplate(ctx, database.InsertTemplateParams{
 			ID:                           id,
@@ -356,7 +357,7 @@ func (api *API) postTemplateByOrganization(rw http.ResponseWriter, r *http.Reque
 				UUID:  dbTemplate.ID,
 				Valid: true,
 			},
-			UpdatedAt: database.Now(),
+			UpdatedAt: dbtime.Now(),
 			Name:      templateVersion.Name,
 			Message:   templateVersion.Message,
 		})
@@ -527,6 +528,12 @@ func (api *API) patchTemplateMeta(rw http.ResponseWriter, r *http.Request) {
 	if req.AutostopRequirement.Weeks < 0 {
 		validErrs = append(validErrs, codersdk.ValidationError{Field: "autostop_requirement.weeks", Detail: "Must be a positive integer."})
 	}
+	if req.AutostopRequirement.Weeks == 0 {
+		req.AutostopRequirement.Weeks = 1
+	}
+	if template.AutostopRequirementWeeks <= 0 {
+		template.AutostopRequirementWeeks = 1
+	}
 	if req.AutostopRequirement.Weeks > schedule.MaxTemplateAutostopRequirementWeeks {
 		validErrs = append(validErrs, codersdk.ValidationError{Field: "autostop_requirement.weeks", Detail: fmt.Sprintf("Must be less than %d.", schedule.MaxTemplateAutostopRequirementWeeks)})
 	}
@@ -579,7 +586,7 @@ func (api *API) patchTemplateMeta(rw http.ResponseWriter, r *http.Request) {
 		var err error
 		err = tx.UpdateTemplateMetaByID(ctx, database.UpdateTemplateMetaByIDParams{
 			ID:                           template.ID,
-			UpdatedAt:                    database.Now(),
+			UpdatedAt:                    dbtime.Now(),
 			Name:                         name,
 			DisplayName:                  req.DisplayName,
 			Description:                  req.Description,
@@ -737,6 +744,11 @@ func (api *API) convertTemplate(
 
 	buildTimeStats := api.metricsCache.TemplateBuildTimeStats(template.ID)
 
+	autostopRequirementWeeks := template.AutostopRequirementWeeks
+	if autostopRequirementWeeks < 1 {
+		autostopRequirementWeeks = 1
+	}
+
 	return codersdk.Template{
 		ID:                             template.ID,
 		CreatedAt:                      template.CreatedAt,
@@ -762,7 +774,7 @@ func (api *API) convertTemplate(
 		TimeTilDormantAutoDeleteMillis: time.Duration(template.TimeTilDormantAutoDelete).Milliseconds(),
 		AutostopRequirement: codersdk.TemplateAutostopRequirement{
 			DaysOfWeek: codersdk.BitmapToWeekdays(uint8(template.AutostopRequirementDaysOfWeek)),
-			Weeks:      template.AutostopRequirementWeeks,
+			Weeks:      autostopRequirementWeeks,
 		},
 	}
 }

@@ -272,7 +272,8 @@ export interface CreateWorkspaceProxyRequest {
 
 // From codersdk/organizations.go
 export interface CreateWorkspaceRequest {
-  readonly template_id: string
+  readonly template_id?: string
+  readonly template_version_id?: string
   readonly name: string
   readonly autostart_schedule?: string
   readonly ttl_ms?: number
@@ -1353,6 +1354,7 @@ export interface WorkspaceAgent {
   readonly shutdown_script_timeout_seconds: number
   readonly subsystems: AgentSubsystem[]
   readonly health: WorkspaceAgentHealth
+  readonly display_apps: DisplayApp[]
 }
 
 // From codersdk/workspaceagents.go
@@ -1592,6 +1594,21 @@ export const BuildReasons: BuildReason[] = [
   "initiator",
 ]
 
+// From codersdk/workspaceagents.go
+export type DisplayApp =
+  | "port_forwarding_helper"
+  | "ssh_helper"
+  | "vscode"
+  | "vscode_insiders"
+  | "web_terminal"
+export const DisplayApps: DisplayApp[] = [
+  "port_forwarding_helper",
+  "ssh_helper",
+  "vscode",
+  "vscode_insiders",
+  "web_terminal",
+]
+
 // From codersdk/deployment.go
 export type Entitlement = "entitled" | "grace_period" | "not_entitled"
 export const Entitlements: Entitlement[] = [
@@ -1608,7 +1625,6 @@ export type Experiment =
   | "tailnet_pg_coordinator"
   | "template_autostop_requirement"
   | "workspace_actions"
-  | "workspaces_batch_actions"
 export const Experiments: Experiment[] = [
   "deployment_health_page",
   "moons",
@@ -1616,7 +1632,6 @@ export const Experiments: Experiment[] = [
   "tailnet_pg_coordinator",
   "template_autostop_requirement",
   "workspace_actions",
-  "workspaces_batch_actions",
 ]
 
 // From codersdk/deployment.go
@@ -1634,6 +1649,7 @@ export type FeatureName =
   | "template_rbac"
   | "user_limit"
   | "user_role_management"
+  | "workspace_batch_actions"
   | "workspace_proxy"
 export const FeatureNames: FeatureName[] = [
   "advanced_template_scheduling",
@@ -1649,6 +1665,7 @@ export const FeatureNames: FeatureName[] = [
   "template_rbac",
   "user_limit",
   "user_role_management",
+  "workspace_batch_actions",
   "workspace_proxy",
 ]
 
@@ -1972,54 +1989,6 @@ export interface HealthcheckAccessURLReport {
   readonly error?: string
 }
 
-// From healthcheck/derp.go
-export interface HealthcheckDERPNodeReport {
-  readonly healthy: boolean
-  // Named type "tailscale.com/tailcfg.DERPNode" unknown, using "any"
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
-  readonly node?: any
-  // Named type "tailscale.com/derp.ServerInfoMessage" unknown, using "any"
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
-  readonly node_info: any
-  readonly can_exchange_messages: boolean
-  readonly round_trip_ping: string
-  readonly round_trip_ping_ms: number
-  readonly uses_websocket: boolean
-  readonly client_logs: string[][]
-  readonly client_errs: string[][]
-  readonly error?: string
-  readonly stun: HealthcheckDERPStunReport
-}
-
-// From healthcheck/derp.go
-export interface HealthcheckDERPRegionReport {
-  readonly healthy: boolean
-  // Named type "tailscale.com/tailcfg.DERPRegion" unknown, using "any"
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
-  readonly region?: any
-  readonly node_reports: HealthcheckDERPNodeReport[]
-  readonly error?: string
-}
-
-// From healthcheck/derp.go
-export interface HealthcheckDERPReport {
-  readonly healthy: boolean
-  readonly regions: Record<number, HealthcheckDERPRegionReport>
-  // Named type "tailscale.com/net/netcheck.Report" unknown, using "any"
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
-  readonly netcheck?: any
-  readonly netcheck_err?: string
-  readonly netcheck_logs: string[]
-  readonly error?: string
-}
-
-// From healthcheck/derp.go
-export interface HealthcheckDERPStunReport {
-  readonly Enabled: boolean
-  readonly CanSTUN: boolean
-  readonly Error?: string
-}
-
 // From healthcheck/database.go
 export interface HealthcheckDatabaseReport {
   readonly healthy: boolean
@@ -2034,7 +2003,9 @@ export interface HealthcheckReport {
   readonly time: string
   readonly healthy: boolean
   readonly failing_sections: string[]
-  readonly derp: HealthcheckDERPReport
+  // Named type "github.com/coder/coder/v2/coderd/healthcheck/derphealth.Report" unknown, using "any"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
+  readonly derp: any
   readonly access_url: HealthcheckAccessURLReport
   readonly websocket: HealthcheckWebsocketReport
   readonly database: HealthcheckDatabaseReport
@@ -2047,4 +2018,54 @@ export interface HealthcheckWebsocketReport {
   readonly body: string
   readonly code: number
   readonly error?: string
+}
+
+// The code below is generated from coderd/healthcheck/derphealth.
+
+// From derphealth/derp.go
+export interface DerphealthNodeReport {
+  readonly healthy: boolean
+  // Named type "tailscale.com/tailcfg.DERPNode" unknown, using "any"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
+  readonly node?: any
+  // Named type "tailscale.com/derp.ServerInfoMessage" unknown, using "any"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
+  readonly node_info: any
+  readonly can_exchange_messages: boolean
+  readonly round_trip_ping: string
+  readonly round_trip_ping_ms: number
+  readonly uses_websocket: boolean
+  readonly client_logs: string[][]
+  readonly client_errs: string[][]
+  readonly error?: string
+  readonly stun: DerphealthStunReport
+}
+
+// From derphealth/derp.go
+export interface DerphealthRegionReport {
+  readonly healthy: boolean
+  // Named type "tailscale.com/tailcfg.DERPRegion" unknown, using "any"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
+  readonly region?: any
+  readonly node_reports: DerphealthNodeReport[]
+  readonly error?: string
+}
+
+// From derphealth/derp.go
+export interface DerphealthReport {
+  readonly healthy: boolean
+  readonly regions: Record<number, DerphealthRegionReport>
+  // Named type "tailscale.com/net/netcheck.Report" unknown, using "any"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- External type
+  readonly netcheck?: any
+  readonly netcheck_err?: string
+  readonly netcheck_logs: string[]
+  readonly error?: string
+}
+
+// From derphealth/derp.go
+export interface DerphealthStunReport {
+  readonly Enabled: boolean
+  readonly CanSTUN: boolean
+  readonly Error?: string
 }

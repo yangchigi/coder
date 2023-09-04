@@ -19,6 +19,7 @@ import (
 	"github.com/coder/coder/v2/enterprise/audit"
 	"github.com/coder/coder/v2/enterprise/audit/backends"
 	"github.com/coder/coder/v2/enterprise/coderd"
+	"github.com/coder/coder/v2/enterprise/coderd/dormancy"
 	"github.com/coder/coder/v2/enterprise/dbcrypt"
 	"github.com/coder/coder/v2/enterprise/trialer"
 	"github.com/coder/coder/v2/tailnet"
@@ -26,8 +27,8 @@ import (
 	agplcoderd "github.com/coder/coder/v2/coderd"
 )
 
-func (r *RootCmd) server() *clibase.Cmd {
-	cmd := r.Server(func(ctx context.Context, options *agplcoderd.Options) (*agplcoderd.API, io.Closer, error) {
+func (r *RootCmd) Server(_ func()) *clibase.Cmd {
+	cmd := r.RootCmd.Server(func(ctx context.Context, options *agplcoderd.Options) (*agplcoderd.API, io.Closer, error) {
 		if options.DeploymentValues.DERP.Server.RelayURL.String() != "" {
 			_, err := url.Parse(options.DeploymentValues.DERP.Server.RelayURL.String())
 			if err != nil {
@@ -51,7 +52,9 @@ func (r *RootCmd) server() *clibase.Cmd {
 			}
 		}
 		options.DERPServer.SetMeshKey(meshKey)
-		options.Auditor = audit.NewAuditor(audit.DefaultFilter,
+		options.Auditor = audit.NewAuditor(
+			options.Database,
+			audit.DefaultFilter,
 			backends.NewPostgres(options.Database, true),
 			backends.NewSlog(options.Logger),
 		)
@@ -69,6 +72,8 @@ func (r *RootCmd) server() *clibase.Cmd {
 			ProxyHealthInterval:       options.DeploymentValues.ProxyHealthStatusInterval.Value(),
 			DefaultQuietHoursSchedule: options.DeploymentValues.UserQuietHoursSchedule.DefaultSchedule.Value(),
 			ProvisionerDaemonPSK:      options.DeploymentValues.Provisioner.DaemonPSK.Value(),
+
+			CheckInactiveUsersCancelFunc: dormancy.CheckInactiveUsers(ctx, options.Logger, options.Database),
 		}
 
 		if encKeys := options.DeploymentValues.ExternalTokenEncryptionKeys.Value(); len(encKeys) != 0 {
