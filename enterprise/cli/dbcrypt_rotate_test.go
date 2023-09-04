@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/coderd/database"
 	"github.com/coder/coder/v2/coderd/database/dbgen"
@@ -103,6 +105,13 @@ func TestDBCryptRotate(t *testing.T) {
 	require.Empty(t, newKey.RevokedKeyDigest.String, "expected the new key to not be revoked")
 	require.Equal(t, cipherBA[1].HexDigest(), oldKey.RevokedKeyDigest.String, "expected the old key to be revoked")
 	require.Empty(t, oldKey.ActiveKeyDigest.String, "expected the old key to not be active")
+
+	// Revoking the new key should fail.
+	err = db.RevokeDBCryptKey(ctx, cipherBA[0].HexDigest())
+	require.Error(t, err, "expected to fail to revoke the new key")
+	var pgErr *pq.Error
+	require.True(t, xerrors.As(err, &pgErr), "expected a pg error")
+	require.EqualValues(t, "23503", pgErr.Code, "expected a foreign key constraint violation error")
 }
 
 func genData(t *testing.T, db database.Store, n int) []database.User {
