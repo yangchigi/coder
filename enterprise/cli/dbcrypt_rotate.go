@@ -5,6 +5,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 
 	"cdr.dev/slog"
@@ -94,36 +95,44 @@ func (*RootCmd) dbcryptRotate() *clibase.Cmd {
 			}
 			logger.Info(ctx, "encrypting user tokens", slog.F("count", len(users)))
 			for idx, usr := range users {
-				userLinks, err := cryptDB.GetUserLinksByUserID(ctx, usr.ID)
-				if err != nil {
-					return xerrors.Errorf("get user links for user: %w", err)
-				}
-				for _, userLink := range userLinks {
-					if _, err := cryptDB.UpdateUserLink(ctx, database.UpdateUserLinkParams{
-						OAuthAccessToken:  userLink.OAuthAccessToken,
-						OAuthRefreshToken: userLink.OAuthRefreshToken,
-						OAuthExpiry:       userLink.OAuthExpiry,
-						UserID:            usr.ID,
-						LoginType:         usr.LoginType,
-					}); err != nil {
-						return xerrors.Errorf("update user link: %w", err)
+				err := cryptDB.InTx(func(tx database.Store) error {
+					userLinks, err := tx.GetUserLinksByUserID(ctx, usr.ID)
+					if err != nil {
+						return xerrors.Errorf("get user links for user: %w", err)
 					}
-				}
-				gitAuthLinks, err := cryptDB.GetGitAuthLinksByUserID(ctx, usr.ID)
-				if err != nil {
-					return xerrors.Errorf("get git auth links for user: %w", err)
-				}
-				for _, gitAuthLink := range gitAuthLinks {
-					if _, err := cryptDB.UpdateGitAuthLink(ctx, database.UpdateGitAuthLinkParams{
-						ProviderID:        gitAuthLink.ProviderID,
-						UserID:            usr.ID,
-						UpdatedAt:         gitAuthLink.UpdatedAt,
-						OAuthAccessToken:  gitAuthLink.OAuthAccessToken,
-						OAuthRefreshToken: gitAuthLink.OAuthRefreshToken,
-						OAuthExpiry:       gitAuthLink.OAuthExpiry,
-					}); err != nil {
-						return xerrors.Errorf("update git auth link: %w", err)
+					for _, userLink := range userLinks {
+						if _, err := tx.UpdateUserLink(ctx, database.UpdateUserLinkParams{
+							OAuthAccessToken:  userLink.OAuthAccessToken,
+							OAuthRefreshToken: userLink.OAuthRefreshToken,
+							OAuthExpiry:       userLink.OAuthExpiry,
+							UserID:            usr.ID,
+							LoginType:         usr.LoginType,
+						}); err != nil {
+							return xerrors.Errorf("update user link: %w", err)
+						}
 					}
+					gitAuthLinks, err := tx.GetGitAuthLinksByUserID(ctx, usr.ID)
+					if err != nil {
+						return xerrors.Errorf("get git auth links for user: %w", err)
+					}
+					for _, gitAuthLink := range gitAuthLinks {
+						if _, err := tx.UpdateGitAuthLink(ctx, database.UpdateGitAuthLinkParams{
+							ProviderID:        gitAuthLink.ProviderID,
+							UserID:            usr.ID,
+							UpdatedAt:         gitAuthLink.UpdatedAt,
+							OAuthAccessToken:  gitAuthLink.OAuthAccessToken,
+							OAuthRefreshToken: gitAuthLink.OAuthRefreshToken,
+							OAuthExpiry:       gitAuthLink.OAuthExpiry,
+						}); err != nil {
+							return xerrors.Errorf("update git auth link: %w", err)
+						}
+					}
+					return nil
+				}, &sql.TxOptions{
+					Isolation: sql.LevelRepeatableRead,
+				})
+				if err != nil {
+					return xerrors.Errorf("update user links: %w", err)
 				}
 				logger.Debug(ctx, "encrypted user tokens", slog.F("current", idx+1), slog.F("cipher", ciphers[0].HexDigest()))
 			}
