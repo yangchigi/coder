@@ -59,10 +59,10 @@ func (*RootCmd) dbcryptRotate() *clibase.Cmd {
 				if err != nil {
 					return xerrors.Errorf("key must be base64-encoded")
 				}
-				if idx > 0 && bytes.Equal(dk, newKey) {
-					return xerrors.Errorf("old key at index %d is the same as the new key", idx)
-				} else {
+				if idx == 0 {
 					newKey = dk
+				} else if bytes.Equal(dk, newKey) {
+					return xerrors.Errorf("old key at index %d is the same as the new key", idx)
 				}
 				keys = append(keys, dk)
 			}
