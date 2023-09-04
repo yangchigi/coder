@@ -1,5 +1,5 @@
 -- name: GetDBCryptKeys :many
-SELECT * FROM dbcrypt_keys;
+SELECT * FROM dbcrypt_keys ORDER BY number ASC;
 
 -- name: RevokeDBCryptKey :exec
 UPDATE dbcrypt_keys

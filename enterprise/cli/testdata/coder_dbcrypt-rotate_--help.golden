@@ -1,4 +1,4 @@
-Usage: coder dbcrypt-rotate [flags] --postgres-url <postgres_url> --external-token-encryption-keys <new-key>,<old-key>
+Usage: coder dbcrypt-rotate [flags] --postgres-url <postgres_url> --external-token-encryption-keys <new-key>,<old-keys>
 
 Rotate database encryption keys
 

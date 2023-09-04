@@ -7,7 +7,7 @@ Rotate database encryption keys
 ## Usage
 
 ```console
-coder dbcrypt-rotate [flags] --postgres-url <postgres_url> --external-token-encryption-keys <new-key>,<old-key>
+coder dbcrypt-rotate [flags] --postgres-url <postgres_url> --external-token-encryption-keys <new-key>,<old-keys>
 ```
 
 ## Options

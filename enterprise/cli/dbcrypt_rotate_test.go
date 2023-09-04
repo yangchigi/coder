@@ -39,28 +39,86 @@ func TestDBCryptRotate(t *testing.T) {
 	})
 	db := database.New(sqlDB)
 
+	// Populate the database with some unencrypted data.
+	users := genData(t, db, 10)
+
 	// Setup an initial cipher
 	keyA := mustString(t, 32)
-	ciphers, err := dbcrypt.NewCiphers([]byte(keyA))
+	cipherA, err := dbcrypt.NewCiphers([]byte(keyA))
 	require.NoError(t, err)
+
+	// Encrypt all the data with the initial cipher.
+	inv, _ := newCLI(t, "dbcrypt-rotate",
+		"--postgres-url", connectionURL,
+		"--external-token-encryption-keys", base64.StdEncoding.EncodeToString([]byte(keyA)),
+	)
+	pty := ptytest.New(t)
+	inv.Stdout = pty.Output()
+	err = inv.Run()
+	require.NoError(t, err)
+
+	// Validate that all existing data has been encrypted with cipher A.
+	requireDataDecryptsWithCipher(ctx, t, db, cipherA[0], users)
 
 	// Create an encrypted database
-	cryptdb, err := dbcrypt.New(ctx, db, ciphers...)
+	cryptdb, err := dbcrypt.New(ctx, db, cipherA...)
 	require.NoError(t, err)
 
-	// Populate the database with some data encrypted with cipher A.
+	// Populate the database with some encrypted data using cipher A.
+	users = append(users, genData(t, cryptdb, 10)...)
+
+	// Re-encrypt all existing data with a new cipher.
+	keyB := mustString(t, 32)
+	cipherBA, err := dbcrypt.NewCiphers([]byte(keyB), []byte(keyA))
+	require.NoError(t, err)
+	externalTokensArg := fmt.Sprintf(
+		"%s,%s",
+		base64.StdEncoding.EncodeToString([]byte(keyB)),
+		base64.StdEncoding.EncodeToString([]byte(keyA)),
+	)
+
+	inv, _ = newCLI(t, "dbcrypt-rotate",
+		"--postgres-url", connectionURL,
+		"--external-token-encryption-keys", externalTokensArg,
+	)
+	pty = ptytest.New(t)
+	inv.Stdout = pty.Output()
+	err = inv.Run()
+	require.NoError(t, err)
+
+	// Validate that all data has been re-encrypted with cipher B.
+	requireDataDecryptsWithCipher(ctx, t, db, cipherBA[0], users)
+
+	// Assert that we can revoke the old key.
+	err = db.RevokeDBCryptKey(ctx, cipherA[0].HexDigest())
+	require.NoError(t, err, "failed to revoke old key")
+
+	// Assert that the key has been revoked in the database.
+	keys, err := db.GetDBCryptKeys(ctx)
+	oldKey := keys[0] // ORDER BY number ASC;
+	newKey := keys[1]
+	require.NoError(t, err, "failed to get db crypt keys")
+	require.Len(t, keys, 2, "expected exactly 2 keys")
+	require.Equal(t, cipherBA[0].HexDigest(), newKey.ActiveKeyDigest.String, "expected the new key to be the active key")
+	require.Empty(t, newKey.RevokedKeyDigest.String, "expected the new key to not be revoked")
+	require.Equal(t, cipherBA[1].HexDigest(), oldKey.RevokedKeyDigest.String, "expected the old key to be revoked")
+	require.Empty(t, oldKey.ActiveKeyDigest.String, "expected the old key to not be active")
+}
+
+func genData(t *testing.T, db database.Store, n int) []database.User {
+	t.Helper()
 	var users []database.User
-	for i := 0; i < 10; i++ {
-		usr := dbgen.User(t, cryptdb, database.User{
+	for i := 0; i < n; i++ {
+		usr := dbgen.User(t, db, database.User{
 			LoginType: database.LoginTypeOIDC,
 		})
-		_ = dbgen.UserLink(t, cryptdb, database.UserLink{
+		_ = dbgen.UserLink(t, db, database.UserLink{
 			UserID:            usr.ID,
 			LoginType:         usr.LoginType,
 			OAuthAccessToken:  mustString(t, 16),
 			OAuthRefreshToken: mustString(t, 16),
 		})
-		_ = dbgen.GitAuthLink(t, cryptdb, database.GitAuthLink{
+		_ = dbgen.GitAuthLink(t, db, database.GitAuthLink{
 			UserID:            usr.ID,
 			ProviderID:        "fake",
 			OAuthAccessToken:  mustString(t, 16),
@@ -68,80 +126,7 @@ func TestDBCryptRotate(t *testing.T) {
 		})
 		users = append(users, usr)
 	}
-
-	// Validate that all data has been encrypted with cipher A.
-	for _, usr := range users {
-		ul, err := db.GetUserLinkByUserIDLoginType(ctx, database.GetUserLinkByUserIDLoginTypeParams{
-			UserID:    usr.ID,
-			LoginType: usr.LoginType,
-		})
-		require.NoError(t, err, "failed to get user link for user %s", usr.ID)
-		requireEncrypted(t, ciphers[0], ul.OAuthAccessToken)
-		requireEncrypted(t, ciphers[0], ul.OAuthRefreshToken)
-		require.Equal(t, ciphers[0].HexDigest(), ul.OAuthAccessTokenKeyID.String)
-		require.Equal(t, ciphers[0].HexDigest(), ul.OAuthRefreshTokenKeyID.String)
-
-		gal, err := db.GetGitAuthLink(ctx, database.GetGitAuthLinkParams{
-			UserID:     usr.ID,
-			ProviderID: "fake",
-		})
-		require.NoError(t, err, "failed to get git auth link for user %s", usr.ID)
-		requireEncrypted(t, ciphers[0], gal.OAuthAccessToken)
-		requireEncrypted(t, ciphers[0], gal.OAuthRefreshToken)
-		require.Equal(t, ciphers[0].HexDigest(), gal.OAuthAccessTokenKeyID.String)
-		require.Equal(t, ciphers[0].HexDigest(), gal.OAuthRefreshTokenKeyID.String)
-	}
-
-	// Run the cmd with ciphers B,A
-	keyB := mustString(t, 32)
-	ciphers, err = dbcrypt.NewCiphers([]byte(keyB), []byte(keyA))
-	require.NoError(t, err)
-	externalTokensArg := fmt.Sprintf(
-		"%s,%s",
-		base64.StdEncoding.EncodeToString([]byte(keyB)),
-		base64.StdEncoding.EncodeToString([]byte(keyA)),
-	)
-	//
-	inv, _ := newCLI(t, "dbcrypt-rotate",
-		"--postgres-url", connectionURL,
-		"--external-token-encryption-keys", externalTokensArg,
-	)
-	pty := ptytest.New(t)
-	inv.Stdout = pty.Output()
-	//
-	err = inv.Run()
-	require.NoError(t, err)
-	//
-	// Validate that all data has been updated with the checksum of the new cipher.
-	for _, usr := range users {
-		ul, err := db.GetUserLinkByUserIDLoginType(ctx, database.GetUserLinkByUserIDLoginTypeParams{
-			UserID:    usr.ID,
-			LoginType: usr.LoginType,
-		})
-		require.NoError(t, err, "failed to get user link for user %s", usr.ID)
-		requireEncrypted(t, ciphers[0], ul.OAuthAccessToken)
-		requireEncrypted(t, ciphers[0], ul.OAuthRefreshToken)
-		require.Equal(t, ciphers[0].HexDigest(), ul.OAuthAccessTokenKeyID.String)
-		require.Equal(t, ciphers[0].HexDigest(), ul.OAuthRefreshTokenKeyID.String)
-		//
-		gal, err := db.GetGitAuthLink(ctx, database.GetGitAuthLinkParams{
-			UserID:     usr.ID,
-			ProviderID: "fake",
-		})
-		require.NoError(t, err, "failed to get git auth link for user %s", usr.ID)
-		requireEncrypted(t, ciphers[0], gal.OAuthAccessToken)
-		requireEncrypted(t, ciphers[0], gal.OAuthRefreshToken)
-		require.Equal(t, ciphers[0].HexDigest(), gal.OAuthAccessTokenKeyID.String)
-		require.Equal(t, ciphers[0].HexDigest(), gal.OAuthRefreshTokenKeyID.String)
-	}
-}
-
-func requireEncrypted(t *testing.T, c dbcrypt.Cipher, s string) {
-	t.Helper()
-	decodedVal, err := base64.StdEncoding.DecodeString(s)
-	require.NoError(t, err, "failed to decode base64 string")
-	_, err = c.Decrypt(decodedVal)
-	require.NoError(t, err, "failed to decrypt value")
+	return users
 }
 
 func mustString(t *testing.T, n int) string {
@@ -149,4 +134,37 @@ func mustString(t *testing.T, n int) string {
 	s, err := cryptorand.String(n)
 	require.NoError(t, err)
 	return s
+}
+
+func requireDecryptWithCipher(t *testing.T, c dbcrypt.Cipher, s string) {
+	t.Helper()
+	decodedVal, err := base64.StdEncoding.DecodeString(s)
+	require.NoError(t, err, "failed to decode base64 string")
+	_, err = c.Decrypt(decodedVal)
+	require.NoError(t, err, "failed to decrypt value")
+}
+
+func requireDataDecryptsWithCipher(ctx context.Context, t *testing.T, db database.Store, c dbcrypt.Cipher, users []database.User) {
+	t.Helper()
+	for _, usr := range users {
+		ul, err := db.GetUserLinkByUserIDLoginType(ctx, database.GetUserLinkByUserIDLoginTypeParams{
+			UserID:    usr.ID,
+			LoginType: usr.LoginType,
+		})
+		require.NoError(t, err, "failed to get user link for user %s", usr.ID)
+		requireDecryptWithCipher(t, c, ul.OAuthAccessToken)
+		requireDecryptWithCipher(t, c, ul.OAuthRefreshToken)
+		require.Equal(t, c.HexDigest(), ul.OAuthAccessTokenKeyID.String)
+		require.Equal(t, c.HexDigest(), ul.OAuthRefreshTokenKeyID.String)
+		//
+		gal, err := db.GetGitAuthLink(ctx, database.GetGitAuthLinkParams{
+			UserID:     usr.ID,
+			ProviderID: "fake",
+		})
+		require.NoError(t, err, "failed to get git auth link for user %s", usr.ID)
+		requireDecryptWithCipher(t, c, gal.OAuthAccessToken)
+		requireDecryptWithCipher(t, c, gal.OAuthRefreshToken)
+		require.Equal(t, c.HexDigest(), gal.OAuthAccessTokenKeyID.String)
+		require.Equal(t, c.HexDigest(), gal.OAuthRefreshTokenKeyID.String)
+	}
 }

@@ -37,13 +37,19 @@ func (*RootCmd) dbcryptRotate() *clibase.Cmd {
 			ctx, cancel := context.WithCancel(inv.Context())
 			defer cancel()
 			logger := slog.Make(sloghuman.Sink(inv.Stdout))
+			if ok, _ := inv.ParsedFlags().GetBool("verbose"); ok {
+				logger = logger.Leveled(slog.LevelDebug)
+			}
 
 			if vals.PostgresURL == "" {
 				return xerrors.Errorf("no database configured")
 			}
 
-			if vals.ExternalTokenEncryptionKeys == nil || len(vals.ExternalTokenEncryptionKeys) < 2 {
-				return xerrors.Errorf("dbcrypt-rotate requires at least two external token encryption keys")
+			switch len(vals.ExternalTokenEncryptionKeys) {
+			case 0:
+				return xerrors.Errorf("no external token encryption keys provided")
+			case 1:
+				logger.Info(ctx, "only one key provided, data will be re-encrypted with the same key")
 			}
 
 			keys := make([][]byte, 0, len(vals.ExternalTokenEncryptionKeys))
@@ -86,6 +92,7 @@ func (*RootCmd) dbcryptRotate() *clibase.Cmd {
 			if err != nil {
 				return xerrors.Errorf("get users: %w", err)
 			}
+			logger.Info(ctx, "encrypting user tokens", slog.F("count", len(users)))
 			for idx, usr := range users {
 				userLinks, err := cryptDB.GetUserLinksByUserID(ctx, usr.ID)
 				if err != nil {
@@ -118,9 +125,17 @@ func (*RootCmd) dbcryptRotate() *clibase.Cmd {
 						return xerrors.Errorf("update git auth link: %w", err)
 					}
 				}
-				logger.Info(ctx, "encrypted user tokens", slog.F("current", idx+1), slog.F("of", len(users)))
+				logger.Debug(ctx, "encrypted user tokens", slog.F("current", idx+1), slog.F("cipher", ciphers[0].HexDigest()))
 			}
 			logger.Info(ctx, "operation completed successfully")
+
+			// Revoke old keys
+			for _, c := range ciphers[1:] {
+				if err := db.RevokeDBCryptKey(ctx, c.HexDigest()); err != nil {
+					return xerrors.Errorf("revoke key: %w", err)
+				}
+				logger.Info(ctx, "revoked unused key", slog.F("digest", c.HexDigest()))
+			}
 			return nil
 		},
 	}
