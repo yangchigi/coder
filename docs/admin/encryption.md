@@ -1,10 +1,8 @@
 # Database Encryption
 
-By default, Coder stores external user tokens in plaintext in the database. This
-is undesirable in high-security environments, as an attacker with access to the
-database can use these tokens to impersonate users. Database Encryption allows
-Coder administrators to encrypt these tokens at-rest, preventing attackers from
-using them.
+By default, Coder stores external user tokens in plaintext in the database.
+Database Encryption allows Coder administrators to encrypt these tokens at-rest,
+preventing attackers with database access from using them to impersonate users.
 
 ## How it works
 
@@ -27,19 +25,20 @@ The following database fields are currently encrypted:
 
 Additional database fields may be encrypted in the future.
 
-> Implementation note: there is an additional encrypted database field
-> `dbcrypt_sentinel.value`. This field is used to verify that the encryption
-> keys are valid for the configured database. It is not used to encrypt any user
+> Implementation notes: each encrypted database column `$C` has a corresponding
+> `$C_key_id` column. This column is used to determine which encryption key was
+> used to encrypt the data. This allows Coder to rotate encryption keys without
+> invalidating existing tokens, and provides referential integrity for encrypted
 > data.
-
-Encrypted data is stored in the following format:
-
-- `encrypted_data = dbcrypt-<b64data>`
-- `b64data = <cipher checksum>-<ciphertext>`
-
-All encrypted data is prefixed with the string `dbcrypt-`. The cipher checksum
-is the first 7 bytes of the SHA256 hex digest of the encryption key used to
-encrypt the data.
+>
+> The `$C_key_id` column stores the first 7 bytes of the SHA-256 hash of the
+> encryption key used to encrypt the data.
+>
+> Encryption keys in use are stored in `dbcrypt_keys`. This table stores a
+> record of all encryption keys that have been used to encrypt data. Active keys
+> have a null `revoked_key_id` column, and revoked keys have a non-null
+> `revoked_key_id` column. A key cannot be revoked until all rows referring to
+> it have been re-encrypted with a different key.
 
 ## Enabling encryption
 
@@ -97,12 +96,12 @@ metadata:
   name: coder-external-token-encryption-keys
   namespace: coder-namespace
 data:
-  keys: <new-key>,<old-key>
+  keys: <new-key>,<old-key1>,<old-key2>,...
 ```
 
 1. After updating the configuration, restart the Coder server. The server will
    now encrypt all new data with the new key, but will be able to decrypt tokens
-   encrypted with the old key.
+   encrypted with the old key(s).
 
 1. To re-encrypt all encrypted database fields with the new key, run
    [`coder dbcrypt-rotate`](../cli/dbcrypt-rotate.md). This command will
@@ -121,26 +120,10 @@ data:
 
 ## Disabling encryption
 
-Automatically disabling encryption is currently not supported. Encryption can be
-disabled by removing the encrypted data manually from the database:
-
-```sql
-DELETE FROM user_links WHERE oauth_access_token LIKE 'dbcrypt-%';
-DELETE FROM user_links WHERE oauth_refresh_token LIKE 'dbcrypt-%';
-DELETE FROM git_auth_links WHERE oauth_access_token LIKE 'dbcrypt-%';
-DELETE FROM git_auth_links WHERE oauth_refresh_token LIKE 'dbcrypt-%';
-DELETE FROM dbcrypt_sentinel WHERE value LIKE 'dbcrypt-%';
-```
-
-Users will then need to re-authenticate with external authentication providers.
+Disabling encryption is currently not supported.
 
 ## Troubleshooting
 
-- If Coder detects that the data stored in the database under
-  `dbcrypt_sentinel.value` was not encrypted with a known key, it will refuse to
-  start. If you are seeing this behaviour, ensure that the encryption keys
-  provided are correct.
-- If Coder is unable to decrypt a token, it will be treated as if the data were
-  not present. This means that the user will be prompted to re-authenticate with
-  the external provider. If you are seeing this behaviour consistently, ensure
-  that the encryption keys are correct.
+- If Coder detects that the data stored in the database was not encrypted with
+  any known keys, it will refuse to start. If you are seeing this behaviour,
+  ensure that the encryption keys provided are correct.
