@@ -671,6 +671,39 @@ func (q *FakeQuerier) isEveryoneGroup(id uuid.UUID) bool {
 	return false
 }
 
+func (q *FakeQuerier) insertDBCryptKeyNoLock(_ context.Context, arg database.InsertDBCryptKeyParams) error {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return err
+	}
+
+	for _, key := range q.dbcryptKeys {
+		if key.Number == arg.Number {
+			return errDuplicateKey
+		}
+	}
+
+	q.dbcryptKeys = append(q.dbcryptKeys, database.DBCryptKey{
+		Number:          arg.Number,
+		ActiveKeyDigest: sql.NullString{String: arg.ActiveKeyDigest, Valid: true},
+		Test:            arg.Test,
+	})
+	return nil
+}
+
+func (q *FakeQuerier) GetActiveDBCryptKeys(_ context.Context) ([]database.DBCryptKey, error) {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	ks := make([]database.DBCryptKey, 0, len(q.dbcryptKeys))
+	for _, k := range q.dbcryptKeys {
+		if !k.ActiveKeyDigest.Valid {
+			continue
+		}
+		ks = append([]database.DBCryptKey{}, k)
+	}
+	return ks, nil
+}
+
 func (*FakeQuerier) AcquireLock(_ context.Context, _ int64) error {
 	return xerrors.New("AcquireLock must only be called within a transaction")
 }
@@ -965,16 +998,6 @@ func (q *FakeQuerier) GetAPIKeysLastUsedAfter(_ context.Context, after time.Time
 	return apiKeys, nil
 }
 
-func (q *FakeQuerier) GetActiveDBCryptKeys(_ context.Context) ([]database.DBCryptKey, error) {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
-	if len(q.dbcryptKeys) == 0 {
-		return nil, sql.ErrNoRows
-	}
-	ks := append([]database.DBCryptKey{}, q.dbcryptKeys...)
-	return ks, nil
-}
-
 func (q *FakeQuerier) GetActiveUserCount(_ context.Context) (int64, error) {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
@@ -1165,6 +1188,14 @@ func (q *FakeQuerier) GetAuthorizationUserRoles(_ context.Context, userID uuid.U
 		Roles:    roles,
 		Groups:   groups,
 	}, nil
+}
+
+func (q *FakeQuerier) GetDBCryptKeys(_ context.Context) ([]database.DBCryptKey, error) {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	ks := make([]database.DBCryptKey, 0)
+	ks = append(ks, q.dbcryptKeys...)
+	return ks, nil
 }
 
 func (q *FakeQuerier) GetDERPMeshKey(_ context.Context) (string, error) {
@@ -3887,26 +3918,8 @@ func (q *FakeQuerier) InsertAuditLog(_ context.Context, arg database.InsertAudit
 }
 
 func (q *FakeQuerier) InsertDBCryptKey(ctx context.Context, arg database.InsertDBCryptKeyParams) error {
-	err := validateDatabaseType(arg)
-	if err != nil {
-		return err
-	}
-
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
-
-	for _, key := range q.dbcryptKeys {
-		if key.Number == arg.Number {
-			return errDuplicateKey
-		}
-	}
-
-	q.dbcryptKeys = append(q.dbcryptKeys, database.DBCryptKey{
-		Number:          arg.Number,
-		ActiveKeyDigest: sql.NullString{String: arg.ActiveKeyDigest, Valid: true},
-		Test:            arg.Test,
-	})
-	return nil
+	// This only ever gets called inside a transaction, so we need to not lock.
+	return q.insertDBCryptKeyNoLock(ctx, arg)
 }
 
 func (q *FakeQuerier) InsertDERPMeshKey(_ context.Context, id string) error {
@@ -3955,13 +3968,15 @@ func (q *FakeQuerier) InsertGitAuthLink(_ context.Context, arg database.InsertGi
 	defer q.mutex.Unlock()
 	// nolint:gosimple
 	gitAuthLink := database.GitAuthLink{
-		ProviderID:        arg.ProviderID,
-		UserID:            arg.UserID,
-		CreatedAt:         arg.CreatedAt,
-		UpdatedAt:         arg.UpdatedAt,
-		OAuthAccessToken:  arg.OAuthAccessToken,
-		OAuthRefreshToken: arg.OAuthRefreshToken,
-		OAuthExpiry:       arg.OAuthExpiry,
+		ProviderID:             arg.ProviderID,
+		UserID:                 arg.UserID,
+		CreatedAt:              arg.CreatedAt,
+		UpdatedAt:              arg.UpdatedAt,
+		OAuthAccessToken:       arg.OAuthAccessToken,
+		OAuthAccessTokenKeyID:  arg.OAuthAccessTokenKeyID,
+		OAuthRefreshToken:      arg.OAuthRefreshToken,
+		OAuthRefreshTokenKeyID: arg.OAuthRefreshTokenKeyID,
+		OAuthExpiry:            arg.OAuthExpiry,
 	}
 	q.gitAuthLinks = append(q.gitAuthLinks, gitAuthLink)
 	return gitAuthLink, nil
@@ -4425,12 +4440,14 @@ func (q *FakeQuerier) InsertUserLink(_ context.Context, args database.InsertUser
 
 	//nolint:gosimple
 	link := database.UserLink{
-		UserID:            args.UserID,
-		LoginType:         args.LoginType,
-		LinkedID:          args.LinkedID,
-		OAuthAccessToken:  args.OAuthAccessToken,
-		OAuthRefreshToken: args.OAuthRefreshToken,
-		OAuthExpiry:       args.OAuthExpiry,
+		UserID:                 args.UserID,
+		LoginType:              args.LoginType,
+		LinkedID:               args.LinkedID,
+		OAuthAccessToken:       args.OAuthAccessToken,
+		OAuthAccessTokenKeyID:  args.OAuthAccessTokenKeyID,
+		OAuthRefreshToken:      args.OAuthRefreshToken,
+		OAuthRefreshTokenKeyID: args.OAuthRefreshTokenKeyID,
+		OAuthExpiry:            args.OAuthExpiry,
 	}
 
 	q.userLinks = append(q.userLinks, link)
@@ -4855,7 +4872,7 @@ func (q *FakeQuerier) RegisterWorkspaceProxy(_ context.Context, arg database.Reg
 	return database.WorkspaceProxy{}, sql.ErrNoRows
 }
 
-func (q *FakeQuerier) RevokeDBCryptKey(ctx context.Context, activeKeyDigest string) error {
+func (q *FakeQuerier) RevokeDBCryptKey(_ context.Context, activeKeyDigest string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
@@ -4936,7 +4953,9 @@ func (q *FakeQuerier) UpdateGitAuthLink(_ context.Context, arg database.UpdateGi
 		}
 		gitAuthLink.UpdatedAt = arg.UpdatedAt
 		gitAuthLink.OAuthAccessToken = arg.OAuthAccessToken
+		gitAuthLink.OAuthAccessTokenKeyID = arg.OAuthAccessTokenKeyID
 		gitAuthLink.OAuthRefreshToken = arg.OAuthRefreshToken
+		gitAuthLink.OAuthRefreshTokenKeyID = arg.OAuthRefreshTokenKeyID
 		gitAuthLink.OAuthExpiry = arg.OAuthExpiry
 		q.gitAuthLinks[index] = gitAuthLink
 
@@ -5408,7 +5427,9 @@ func (q *FakeQuerier) UpdateUserLink(_ context.Context, params database.UpdateUs
 	for i, link := range q.userLinks {
 		if link.UserID == params.UserID && link.LoginType == params.LoginType {
 			link.OAuthAccessToken = params.OAuthAccessToken
+			link.OAuthAccessTokenKeyID = params.OAuthAccessTokenKeyID
 			link.OAuthRefreshToken = params.OAuthRefreshToken
+			link.OAuthRefreshTokenKeyID = params.OAuthRefreshTokenKeyID
 			link.OAuthExpiry = params.OAuthExpiry
 
 			q.userLinks[i] = link

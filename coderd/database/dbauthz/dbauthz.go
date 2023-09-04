@@ -777,13 +777,6 @@ func (q *querier) GetAPIKeysLastUsedAfter(ctx context.Context, lastUsed time.Tim
 	return fetchWithPostFilter(q.auth, q.db.GetAPIKeysLastUsedAfter)(ctx, lastUsed)
 }
 
-func (q *querier) GetActiveDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
-	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
-		return nil, err
-	}
-	return q.db.GetActiveDBCryptKeys(ctx)
-}
-
 func (q *querier) GetActiveUserCount(ctx context.Context) (int64, error) {
 	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
 		return 0, err
@@ -833,6 +826,13 @@ func (q *querier) GetAuthorizationUserRoles(ctx context.Context, userID uuid.UUI
 		return database.GetAuthorizationUserRolesRow{}, err
 	}
 	return q.db.GetAuthorizationUserRoles(ctx, userID)
+}
+
+func (q *querier) GetDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
+	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
+		return nil, err
+	}
+	return q.db.GetDBCryptKeys(ctx)
 }
 
 func (q *querier) GetDERPMeshKey(ctx context.Context) (string, error) {

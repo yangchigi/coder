@@ -1,8 +1,5 @@
--- name: GetActiveDBCryptKeys :many
-SELECT *
-FROM dbcrypt_keys
-WHERE active_key_digest IS NOT NULL
-AND revoked_key_digest IS NULL;
+-- name: GetDBCryptKeys :many
+SELECT * FROM dbcrypt_keys;
 
 -- name: RevokeDBCryptKey :exec
 UPDATE dbcrypt_keys

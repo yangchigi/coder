@@ -20,16 +20,15 @@
 //
 // Encryption keys are stored in the database in the table `dbcrypt_keys`.
 // The table has the following schema:
-// 	- number: the key number. This is used to avoid conflicts when rotating keys.
-//  - created_at: the time the key was created.
-// 	- active_key_digest: the SHA256 digest of the active key. If null, the key has been revoked.
-//  - revoked_key_digest: the SHA256 digest of the revoked key. If null, the key has not been revoked.
-//  - revoked_at: the time the key was revoked. If null, the key has not been revoked.
-// 	- test: the encrypted value of the string "coder". This is used to ensure that the key is valid.
+//   - number: the key number. This is used to avoid conflicts when rotating keys.
+//   - created_at: the time the key was created.
+//   - active_key_digest: the SHA256 digest of the active key. If null, the key has been revoked.
+//   - revoked_key_digest: the SHA256 digest of the revoked key. If null, the key has not been revoked.
+//   - revoked_at: the time the key was revoked. If null, the key has not been revoked.
+//   - test: the encrypted value of the string "coder". This is used to ensure that the key is valid.
 //
 // Encrypted fields are stored in the database as a base64-encoded string.
 // Each encrypted column MUST have a corresponding _key_id column that is a foreign key
 // reference to `dbcrypt_keys.active_key_digest`. This ensures that a key cannot be
 // revoked until all rows that use that key have been migrated to a new key.
-
 package dbcrypt

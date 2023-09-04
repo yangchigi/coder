@@ -636,15 +636,12 @@ func (q *sqlQuerier) InsertAuditLog(ctx context.Context, arg InsertAuditLogParam
 	return i, err
 }
 
-const getActiveDBCryptKeys = `-- name: GetActiveDBCryptKeys :many
-SELECT number, active_key_digest, revoked_key_digest, created_at, revoked_at, test
-FROM dbcrypt_keys
-WHERE active_key_digest IS NOT NULL
-AND revoked_key_digest IS NULL
+const getDBCryptKeys = `-- name: GetDBCryptKeys :many
+SELECT number, active_key_digest, revoked_key_digest, created_at, revoked_at, test FROM dbcrypt_keys
 `
 
-func (q *sqlQuerier) GetActiveDBCryptKeys(ctx context.Context) ([]DBCryptKey, error) {
-	rows, err := q.db.QueryContext(ctx, getActiveDBCryptKeys)
+func (q *sqlQuerier) GetDBCryptKeys(ctx context.Context) ([]DBCryptKey, error) {
+	rows, err := q.db.QueryContext(ctx, getDBCryptKeys)
 	if err != nil {
 		return nil, err
 	}

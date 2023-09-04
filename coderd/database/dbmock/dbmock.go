@@ -356,21 +356,6 @@ func (mr *MockStoreMockRecorder) GetAPIKeysLastUsedAfter(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAPIKeysLastUsedAfter", reflect.TypeOf((*MockStore)(nil).GetAPIKeysLastUsedAfter), arg0, arg1)
 }
 
-// GetActiveDBCryptKeys mocks base method.
-func (m *MockStore) GetActiveDBCryptKeys(arg0 context.Context) ([]database.DBCryptKey, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetActiveDBCryptKeys", arg0)
-	ret0, _ := ret[0].([]database.DBCryptKey)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetActiveDBCryptKeys indicates an expected call of GetActiveDBCryptKeys.
-func (mr *MockStoreMockRecorder) GetActiveDBCryptKeys(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveDBCryptKeys", reflect.TypeOf((*MockStore)(nil).GetActiveDBCryptKeys), arg0)
-}
-
 // GetActiveUserCount mocks base method.
 func (m *MockStore) GetActiveUserCount(arg0 context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -519,6 +504,21 @@ func (m *MockStore) GetAuthorizedWorkspaces(arg0 context.Context, arg1 database.
 func (mr *MockStoreMockRecorder) GetAuthorizedWorkspaces(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAuthorizedWorkspaces", reflect.TypeOf((*MockStore)(nil).GetAuthorizedWorkspaces), arg0, arg1, arg2)
+}
+
+// GetDBCryptKeys mocks base method.
+func (m *MockStore) GetDBCryptKeys(arg0 context.Context) ([]database.DBCryptKey, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDBCryptKeys", arg0)
+	ret0, _ := ret[0].([]database.DBCryptKey)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDBCryptKeys indicates an expected call of GetDBCryptKeys.
+func (mr *MockStoreMockRecorder) GetDBCryptKeys(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDBCryptKeys", reflect.TypeOf((*MockStore)(nil).GetDBCryptKeys), arg0)
 }
 
 // GetDERPMeshKey mocks base method.

@@ -230,13 +230,6 @@ func (m metricsStore) GetAPIKeysLastUsedAfter(ctx context.Context, lastUsed time
 	return apiKeys, err
 }
 
-func (m metricsStore) GetActiveDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
-	start := time.Now()
-	r0, r1 := m.s.GetActiveDBCryptKeys(ctx)
-	m.queryLatencies.WithLabelValues("GetActiveDBCryptKeys").Observe(time.Since(start).Seconds())
-	return r0, r1
-}
-
 func (m metricsStore) GetActiveUserCount(ctx context.Context) (int64, error) {
 	start := time.Now()
 	count, err := m.s.GetActiveUserCount(ctx)
@@ -284,6 +277,13 @@ func (m metricsStore) GetAuthorizationUserRoles(ctx context.Context, userID uuid
 	row, err := m.s.GetAuthorizationUserRoles(ctx, userID)
 	m.queryLatencies.WithLabelValues("GetAuthorizationUserRoles").Observe(time.Since(start).Seconds())
 	return row, err
+}
+
+func (m metricsStore) GetDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetDBCryptKeys(ctx)
+	m.queryLatencies.WithLabelValues("GetDBCryptKeys").Observe(time.Since(start).Seconds())
+	return r0, r1
 }
 
 func (m metricsStore) GetDERPMeshKey(ctx context.Context) (string, error) {

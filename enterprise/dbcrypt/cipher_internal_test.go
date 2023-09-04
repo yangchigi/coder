@@ -71,7 +71,7 @@ func TestCiphersBackwardCompatibility(t *testing.T) {
 		msg = "hello world"
 		key = bytes.Repeat([]byte{'a'}, 32)
 		//nolint: gosec // The below is the base64-encoded result of encrypting the above message with the above key.
-		encoded = `ODY0ZjcwMi0Rrj5Q0mm+UDcKb0Ge4kU1HX2XsQ6yV7za/2lQrdVb/ZbaUjLBhuU=`
+		encoded = `YhAz+lE2fFeeiVPH9voKN7UV1xSDrgcnC0LmNXmaAk1Yg0kPFO3x`
 	)
 
 	cipher, err := cipherAES256(key)

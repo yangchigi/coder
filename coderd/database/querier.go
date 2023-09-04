@@ -47,7 +47,6 @@ type sqlcQuerier interface {
 	GetAPIKeysByLoginType(ctx context.Context, loginType LoginType) ([]APIKey, error)
 	GetAPIKeysByUserID(ctx context.Context, arg GetAPIKeysByUserIDParams) ([]APIKey, error)
 	GetAPIKeysLastUsedAfter(ctx context.Context, lastUsed time.Time) ([]APIKey, error)
-	GetActiveDBCryptKeys(ctx context.Context) ([]DBCryptKey, error)
 	GetActiveUserCount(ctx context.Context) (int64, error)
 	GetActiveWorkspaceBuildsByTemplateID(ctx context.Context, templateID uuid.UUID) ([]WorkspaceBuild, error)
 	GetAllTailnetAgents(ctx context.Context) ([]TailnetAgent, error)
@@ -59,6 +58,7 @@ type sqlcQuerier interface {
 	// This function returns roles for authorization purposes. Implied member roles
 	// are included.
 	GetAuthorizationUserRoles(ctx context.Context, userID uuid.UUID) (GetAuthorizationUserRolesRow, error)
+	GetDBCryptKeys(ctx context.Context) ([]DBCryptKey, error)
 	GetDERPMeshKey(ctx context.Context) (string, error)
 	GetDefaultProxyConfig(ctx context.Context) (GetDefaultProxyConfigRow, error)
 	GetDeploymentDAUs(ctx context.Context, tzOffset int32) ([]GetDeploymentDAUsRow, error)
