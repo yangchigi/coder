@@ -134,11 +134,13 @@ export const AgentMetadata: FC<{
   const severityWarning = useSeverityWarning()
   useEffect(() => {
     if (metadata) {
-      const hasSeverity = metadata.some(
+      const metaWithSeverity = metadata.find(
         (m) =>
           m.result.value.includes("Crit") || m.result.value.includes("High"),
       )
-      severityWarning.setOpen(hasSeverity)
+      if (metaWithSeverity) {
+        severityWarning.setSeverity(metaWithSeverity.result.value)
+      }
     }
   }, [metadata, severityWarning])
 
