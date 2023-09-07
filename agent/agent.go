@@ -406,6 +406,10 @@ func (a *agent) reportMetadataLoop(ctx context.Context) {
 		// mutex logic and overloading the API.
 		for _, md := range manifest.Metadata {
 			md := md
+			if md.Key == "99_image_vuln" {
+				logger.Debug(ctx, "skipping jfrog field")
+				continue
+			}
 			// We send the result to the channel in the goroutine to avoid
 			// sending the same result multiple times. So, we don't care about
 			// the return values.

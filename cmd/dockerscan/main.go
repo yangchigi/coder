@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,11 +19,14 @@ import (
 	"github.com/jfrog/jfrog-client-go/utils/io/httputils"
 	"github.com/jfrog/jfrog-client-go/xray"
 	"github.com/jfrog/jfrog-client-go/xray/auth"
+
+	"github.com/coder/coder/v2/codersdk/agentsdk"
 )
 
 const (
 	defaultRepo         = "docker-local"
-	defaultScanInterval = time.Minute
+	defaultScanInterval = time.Second * 5
+	defaultMetadataKey  = "99_image_vuln"
 )
 
 func main() {
@@ -56,11 +60,37 @@ func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient)
 			fmt.Println("no results!")
 			return
 		}
+		cclient := agentsdk.New(&url.URL{
+			Scheme: "https",
+			Host:   "qpmefhb7mbvgs.pit-1.try.coder.app",
+		})
+		cclient.SetSessionToken(agentToken(container))
+		postMetadata(cclient, result.SecIssues.Critical, result.SecIssues.High)
 		fmt.Println("Image: ", container.Config.Image)
 		fmt.Println("\tCritical: ", result.SecIssues.Critical)
 		fmt.Println("\tHigh: ", result.SecIssues.High)
-		fmt.Println("\n\n")
+		fmt.Println("\n")
 	}
+}
+
+func postMetadata(cclient *agentsdk.Client, critical int, high int) {
+	var errStr string
+	var value string
+	if critical > 0 || high > 0 {
+		errStr = fmt.Sprintf("Crit(%d) High(%d)", critical, high)
+		value = errStr
+	} else {
+		value = "None"
+	}
+	fmt.Println("error: ", errStr)
+	fmt.Println("value: ", value)
+	err := cclient.PostMetadata(context.Background(), defaultMetadataKey, agentsdk.PostMetadataRequest{
+		CollectedAt: time.Now(),
+		Age:         0,
+		Value:       value,
+		Error:       errStr,
+	})
+	must(err)
 }
 
 func listCoderContainers(client *client.Client) []types.ContainerJSON {
@@ -71,7 +101,7 @@ func listCoderContainers(client *client.Client) []types.ContainerJSON {
 	for _, container := range containers {
 		inspect, err := client.ContainerInspect(context.Background(), container.ID)
 		must(err)
-		if !containsEnvKey(inspect.Config.Env, "CODER_AGENT_TOKEN") {
+		if token := agentToken(inspect); token == "" {
 			fmt.Println("Skipping non-coder container ", inspect.Name)
 			continue
 		}
@@ -80,13 +110,14 @@ func listCoderContainers(client *client.Client) []types.ContainerJSON {
 	return filtered
 }
 
-func containsEnvKey(envs []string, key string) bool {
-	for _, env := range envs {
-		if strings.HasPrefix(env, key+"=") {
-			return true
+func agentToken(c types.ContainerJSON) string {
+	for _, env := range c.Config.Env {
+		if strings.HasPrefix(env, "CODER_AGENT_TOKEN=") {
+			idx := strings.Index(env, "=")
+			return env[idx+1:]
 		}
 	}
-	return false
+	return ""
 }
 
 // fetchSecurityResults fetches results for images in a repo

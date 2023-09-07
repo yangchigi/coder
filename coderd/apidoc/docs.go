@@ -5097,6 +5097,44 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaceagents/{workspaceagent}/metadata": {
+            "get": {
+                "security": [
+                    {
+                        "CoderSessionToken": []
+                    }
+                ],
+                "tags": [
+                    "Agents"
+                ],
+                "summary": "Get workspace agent metadata.",
+                "operationId": "get-workspace-agent-metadata",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Workspace agent ID",
+                        "name": "workspaceagent",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/codersdk.WorkspaceAgentMetadata"
+                            }
+                        }
+                    }
+                },
+                "x-apidocgen": {
+                    "skip": true
+                }
+            }
+        },
         "/workspaceagents/{workspaceagent}/pty": {
             "get": {
                 "security": [
@@ -10865,6 +10903,17 @@ const docTemplate = `{
                 "WorkspaceAgentLogSourceExternal"
             ]
         },
+        "codersdk.WorkspaceAgentMetadata": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "$ref": "#/definitions/codersdk.WorkspaceAgentMetadataDescription"
+                },
+                "result": {
+                    "$ref": "#/definitions/codersdk.WorkspaceAgentMetadataResult"
+                }
+            }
+        },
         "codersdk.WorkspaceAgentMetadataDescription": {
             "type": "object",
             "properties": {
@@ -10882,6 +10931,25 @@ const docTemplate = `{
                 },
                 "timeout": {
                     "type": "integer"
+                }
+            }
+        },
+        "codersdk.WorkspaceAgentMetadataResult": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "description": "Age is the number of seconds since the metadata was collected.\nIt is provided in addition to CollectedAt to protect against clock skew.",
+                    "type": "integer"
+                },
+                "collected_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
                 }
             }
         },

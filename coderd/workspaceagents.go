@@ -1624,6 +1624,30 @@ func (api *API) workspaceAgentPostMetadata(rw http.ResponseWriter, r *http.Reque
 	httpapi.Write(ctx, rw, http.StatusNoContent, nil)
 }
 
+// @Summary Get workspace agent metadata.
+// @ID get-workspace-agent-metadata
+// @Security CoderSessionToken
+// @Tags Agents
+// @Param workspaceagent path string true "Workspace agent ID" format(uuid)
+// @Router /workspaceagents/{workspaceagent}/metadata [get]
+// @Success 200 {array} codersdk.WorkspaceAgentMetadata
+// @x-apidocgen {"skip": true}
+func (api *API) getWorkspaceAgentMetadata(rw http.ResponseWriter, r *http.Request) {
+	var (
+		ctx            = r.Context()
+		workspaceAgent = httpmw.WorkspaceAgentParam(r)
+	)
+
+	md, err := api.Database.GetWorkspaceAgentMetadata(ctx, workspaceAgent.ID)
+	if err != nil {
+		httpapi.InternalServerError(rw, err)
+		return
+	}
+
+	metadata := convertWorkspaceAgentMetadata(md)
+	httpapi.Write(ctx, rw, http.StatusOK, metadata)
+}
+
 // @Summary Watch for workspace agent metadata updates
 // @ID watch-for-workspace-agent-metadata-updates
 // @Security CoderSessionToken

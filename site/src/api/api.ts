@@ -1285,6 +1285,21 @@ const getMissingParameters = (
  * @returns An EventSource that emits agent metadata event objects
  * (ServerSentEvent)
  */
+export const getAgentMetadata = async (
+  agentId: string,
+): Promise<TypesGen.WorkspaceAgentMetadata[]> => {
+  const response = await axios.get<TypesGen.WorkspaceAgentMetadata[]>(
+    `/api/v2/workspaceagents/${agentId}/metadata`,
+  )
+  return response.data
+}
+
+/**
+ *
+ * @param agentId
+ * @returns An EventSource that emits agent metadata event objects
+ * (ServerSentEvent)
+ */
 export const watchAgentMetadata = (agentId: string): EventSource => {
   return new EventSource(
     `${location.protocol}//${location.host}/api/v2/workspaceagents/${agentId}/watch-metadata`,

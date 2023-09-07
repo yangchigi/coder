@@ -5864,6 +5864,33 @@ If the schedule is empty, the user will be updated to use the default schedule.|
 | `envbuilder`      |
 | `external`        |
 
+## codersdk.WorkspaceAgentMetadata
+
+```json
+{
+  "description": {
+    "display_name": "string",
+    "interval": 0,
+    "key": "string",
+    "script": "string",
+    "timeout": 0
+  },
+  "result": {
+    "age": 0,
+    "collected_at": "2019-08-24T14:15:22Z",
+    "error": "string",
+    "value": "string"
+  }
+}
+```
+
+### Properties
+
+| Name          | Type                                                                                     | Required | Restrictions | Description |
+| ------------- | ---------------------------------------------------------------------------------------- | -------- | ------------ | ----------- |
+| `description` | [codersdk.WorkspaceAgentMetadataDescription](#codersdkworkspaceagentmetadatadescription) | false    |              |             |
+| `result`      | [codersdk.WorkspaceAgentMetadataResult](#codersdkworkspaceagentmetadataresult)           | false    |              |             |
+
 ## codersdk.WorkspaceAgentMetadataDescription
 
 ```json
@@ -5885,6 +5912,26 @@ If the schedule is empty, the user will be updated to use the default schedule.|
 | `key`          | string  | false    |              |             |
 | `script`       | string  | false    |              |             |
 | `timeout`      | integer | false    |              |             |
+
+## codersdk.WorkspaceAgentMetadataResult
+
+```json
+{
+  "age": 0,
+  "collected_at": "2019-08-24T14:15:22Z",
+  "error": "string",
+  "value": "string"
+}
+```
+
+### Properties
+
+| Name           | Type    | Required | Restrictions | Description                                                                                                                             |
+| -------------- | ------- | -------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `age`          | integer | false    |              | Age is the number of seconds since the metadata was collected. It is provided in addition to CollectedAt to protect against clock skew. |
+| `collected_at` | string  | false    |              |                                                                                                                                         |
+| `error`        | string  | false    |              |                                                                                                                                         |
+| `value`        | string  | false    |              |                                                                                                                                         |
 
 ## codersdk.WorkspaceAgentStartupScriptBehavior
 
