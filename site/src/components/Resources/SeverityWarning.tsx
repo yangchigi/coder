@@ -5,7 +5,8 @@ import Box from "@mui/material/Box"
 import { Alert } from "components/Alert/Alert"
 import { ReactNode, createContext, useContext, useState } from "react"
 
-const REVIEW_RESULTS_URL = "https://cdr.jfrog.io/ui/reports"
+const REVIEW_RESULTS_URL =
+  "https://cdr.jfrog.io/ui/scans-list/repositories/docker-local/scan-descendants"
 
 const SeverityWarningContext = createContext<
   | {
@@ -34,7 +35,7 @@ export const SeverityWarningBanner = () => {
   const crit = extractCritValue(severity as string)
   const high = extractHigh(severity as string)
 
-  return (
+  return crit && high ? (
     <Alert
       icon={false}
       severity="warning"
@@ -121,7 +122,7 @@ export const SeverityWarningBanner = () => {
         </Box>
       </Box>
     </Alert>
-  )
+  ) : null
 }
 
 export const useSeverityWarning = () => {

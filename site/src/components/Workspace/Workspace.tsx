@@ -226,7 +226,8 @@ export const Workspace: FC<React.PropsWithChildren<WorkspaceProps>> = ({
           className={styles.firstColumnSpacer}
           spacing={4}
         >
-          {severityWarning.severity && <SeverityWarningBanner />}
+          {workspace.latest_build.status === "running" &&
+            severityWarning.severity && <SeverityWarningBanner />}
           {buildError}
           {cancellationError}
           {workspace.latest_build.status === "running" &&

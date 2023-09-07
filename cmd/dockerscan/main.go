@@ -20,6 +20,7 @@ import (
 	"github.com/jfrog/jfrog-client-go/utils/io/httputils"
 	"github.com/jfrog/jfrog-client-go/xray"
 	"github.com/jfrog/jfrog-client-go/xray/auth"
+	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/codersdk/agentsdk"
 )
@@ -39,31 +40,52 @@ func main() {
 	ticker := time.NewTicker(defaultScanInterval)
 	defer ticker.Stop()
 
-	listVulns(dclient, jclient)
+	err := listVulns(dclient, jclient)
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+	}
+
 	for range ticker.C {
-		listVulns(dclient, jclient)
+		err := listVulns(dclient, jclient)
+		if err != nil {
+			fmt.Printf("err: %v\n", err)
+		}
 	}
 }
 
-func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient) {
-	containers := listCoderContainers(dclient)
+func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient) error {
+	containers, err := listCoderContainers(dclient)
+	if err != nil {
+		return xerrors.Errorf("list coder containers: %w", err)
+	}
+
 	if len(containers) == 0 {
 		fmt.Println("NO CONTAINERS, SKIPPING")
-		return
+		return nil
 	}
-	results := fetchSecurityResults(jclient, defaultRepo)
+
+	results, err := fetchSecurityResults(jclient, defaultRepo)
+	if err != nil {
+		return xerrors.Errorf("fetch results: %w", err)
+	}
+
 	for _, container := range containers {
 		ref, err := name.NewTag(container.Config.Image)
-		must(err)
+		if err != nil {
+			return xerrors.Errorf("new tag: %w", err)
+		}
 		repo := ref.Context().RepositoryStr() + ":" + ref.TagStr()
 		result, ok := results[repo]
 		if !ok {
 			fmt.Println("no results!")
-			return
+			return nil
 		}
 		accessurl := mustAccessURL()
 		host, _, err := net.SplitHostPort(accessurl)
-		must(err)
+		if err != nil {
+			return xerrors.Errorf("split host post %s: %w", accessurl, err)
+		}
+
 		scheme := "https"
 		if strings.Contains(host, "localhost") {
 			scheme = "http"
@@ -74,15 +96,19 @@ func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient)
 			Host:   accessurl,
 		})
 		cclient.SetSessionToken(agentToken(container))
-		postMetadata(cclient, result.SecIssues.Critical, result.SecIssues.High)
+		err = postMetadata(cclient, result.SecIssues.Critical, result.SecIssues.High)
+		if err != nil {
+			return err
+		}
 		fmt.Println("Image: ", container.Config.Image)
 		fmt.Println("\tCritical: ", result.SecIssues.Critical)
 		fmt.Println("\tHigh: ", result.SecIssues.High)
 		fmt.Println("\n")
 	}
+	return nil
 }
 
-func postMetadata(cclient *agentsdk.Client, critical int, high int) {
+func postMetadata(cclient *agentsdk.Client, critical int, high int) error {
 	var errStr string
 	var value string
 	if critical > 0 || high > 0 {
@@ -99,24 +125,31 @@ func postMetadata(cclient *agentsdk.Client, critical int, high int) {
 		Value:       value,
 		Error:       errStr,
 	})
-	must(err)
+	if err != nil {
+		return xerrors.Errorf("post metadata: %w", err)
+	}
+	return nil
 }
 
-func listCoderContainers(client *client.Client) []types.ContainerJSON {
+func listCoderContainers(client *client.Client) ([]types.ContainerJSON, error) {
 	containers, err := client.ContainerList(context.Background(), types.ContainerListOptions{})
-	must(err)
+	if err != nil {
+		return nil, xerrors.Errorf("container list: %w", err)
+	}
 
 	filtered := make([]types.ContainerJSON, 0, len(containers))
 	for _, container := range containers {
 		inspect, err := client.ContainerInspect(context.Background(), container.ID)
-		must(err)
+		if err != nil {
+			return nil, xerrors.Errorf("container inspect: %w", err)
+		}
 		if token := agentToken(inspect); token == "" {
 			fmt.Println("Skipping non-coder container ", inspect.Name)
 			continue
 		}
 		filtered = append(filtered, inspect)
 	}
-	return filtered
+	return filtered, nil
 }
 
 func agentToken(c types.ContainerJSON) string {
@@ -130,21 +163,25 @@ func agentToken(c types.ContainerJSON) string {
 }
 
 // fetchSecurityResults fetches results for images in a repo
-func fetchSecurityResults(client *jfroghttpclient.JfrogHttpClient, repo string) map[string]artifact {
+func fetchSecurityResults(client *jfroghttpclient.JfrogHttpClient, repo string) (map[string]artifact, error) {
 	path := fmt.Sprintf("https://cdr.jfrog.io/xray/api/v1/artifacts?repo=%s", repo)
 	resp, body, _, err := client.SendGet(path, true, &httputils.HttpClientDetails{
 		User:        mustUser(),
 		AccessToken: mustAccessToken(),
 	})
-	must(err)
+	if err != nil {
+		return nil, xerrors.Errorf("send get: %w", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		panicf("unexpected status code %d", resp.StatusCode)
+		return nil, xerrors.Errorf("unexpected status code %d", resp.StatusCode)
 	}
 
 	var response artifactsResponse
 	err = json.Unmarshal(body, &response)
-	must(err)
+	if err != nil {
+		return nil, xerrors.Errorf("unmarshal: %w", err)
+	}
 
 	artifacts := make(map[string]artifact, len(response.Data))
 	for _, artifact := range response.Data {
@@ -152,7 +189,7 @@ func fetchSecurityResults(client *jfroghttpclient.JfrogHttpClient, repo string) 
 		artifacts[key] = artifact
 	}
 
-	return artifacts
+	return artifacts, nil
 }
 
 func fmtKey(a artifact) string {
@@ -203,9 +240,9 @@ func jfrogClient() *jfroghttpclient.JfrogHttpClient {
 }
 
 func dockerClient() *client.Client {
-	client, err := client.NewClientWithOpts(client.FromEnv)
+	dclient, err := client.NewClientWithOpts(client.FromEnv)
 	must(err)
-	return client
+	return dclient
 }
 
 func must(err error) {
