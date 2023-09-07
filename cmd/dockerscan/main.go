@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -60,9 +61,17 @@ func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient)
 			fmt.Println("no results!")
 			return
 		}
+		accessurl := mustAccessURL()
+		host, _, err := net.SplitHostPort(accessurl)
+		must(err)
+		scheme := "https"
+		if strings.Contains(host, "localhost") {
+			scheme = "http"
+		}
+
 		cclient := agentsdk.New(&url.URL{
-			Scheme: "https",
-			Host:   mustAccessURL(),
+			Scheme: scheme,
+			Host:   accessurl,
 		})
 		cclient.SetSessionToken(agentToken(container))
 		postMetadata(cclient, result.SecIssues.Critical, result.SecIssues.High)
