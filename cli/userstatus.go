@@ -9,6 +9,7 @@ import (
 	"github.com/coder/coder/v2/cli/clibase"
 	"github.com/coder/coder/v2/cli/cliui"
 	"github.com/coder/coder/v2/codersdk"
+	"github.com/kr/pretty"
 )
 
 // createUserStatusCommand sets a user status.
@@ -89,7 +90,7 @@ func (r *RootCmd) createUserStatusCommand(sdkStatus codersdk.UserStatus) *clibas
 				return xerrors.Errorf("%s user: %w", verb, err)
 			}
 
-			_, _ = fmt.Fprintf(inv.Stdout, "\nUser %s has been %s!\n", cliui.DefaultStyles.Keyword.Render(user.Username), pastVerb)
+			_, _ = fmt.Fprintf(inv.Stdout, "\nUser %s has been %s!\n", pretty.Sprint(cliui.DefaultStyles.Keyword, user.Username), pastVerb)
 			return nil
 		},
 	}

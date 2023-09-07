@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/kr/pretty"
 	"github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-wordwrap"
 	"golang.org/x/exp/slices"
@@ -582,14 +583,14 @@ func (r *RootCmd) initClientInternal(client *codersdk.Client, allowTokenMissing 
 				// Just log the error here. We never want to fail a command
 				// due to a pre-run.
 				_, _ = fmt.Fprintf(inv.Stderr,
-					cliui.DefaultStyles.Warn.Render("check versions error: %s"), err)
+					pretty.Sprint(cliui.DefaultStyles.Warn, "check versions error: %s"), err)
 				_, _ = fmt.Fprintln(inv.Stderr)
 			}
 
 			if err = <-warningErr; err != nil {
 				// Same as above
 				_, _ = fmt.Fprintf(inv.Stderr,
-					cliui.DefaultStyles.Warn.Render("check entitlement warnings error: %s"), err)
+					pretty.Sprint(cliui.DefaultStyles.Warn, "check entitlement warnings error: %s"), err)
 				_, _ = fmt.Fprintln(inv.Stderr)
 			}
 
@@ -764,7 +765,7 @@ func formatExamples(examples ...example) string {
 		// We add 1 space here because `cliui.DefaultStyles.Code` adds an extra
 		// space. This makes the code block align at an even 2 or 6
 		// spaces for symmetry.
-		_, _ = sb.WriteString(" " + cliui.DefaultStyles.Code.Render(fmt.Sprintf("$ %s", e.Command)))
+		_, _ = sb.WriteString(" " + pretty.Sprint(cliui.DefaultStyles.Code, fmt.Sprintf("$ %s", e.Command)))
 		if i < len(examples)-1 {
 			_, _ = sb.WriteString("\n\n")
 		}
@@ -821,7 +822,7 @@ func (r *RootCmd) checkWarnings(i *clibase.Invocation, client *codersdk.Client) 
 	entitlements, err := client.Entitlements(ctx)
 	if err == nil {
 		for _, w := range entitlements.Warnings {
-			_, _ = fmt.Fprintln(i.Stderr, cliui.DefaultStyles.Warn.Render(w))
+			_, _ = fmt.Fprintln(i.Stderr, pretty.Sprint(cliui.DefaultStyles.Warn, w))
 		}
 	}
 	return nil
@@ -1022,7 +1023,7 @@ func (p *prettyErrorFormatter) printf(style lipgloss.Style, format string, a ...
 
 //nolint:unused
 func SlimUnsupported(w io.Writer, cmd string) {
-	_, _ = fmt.Fprintf(w, "You are using a 'slim' build of Coder, which does not support the %s subcommand.\n", cliui.DefaultStyles.Code.Render(cmd))
+	_, _ = fmt.Fprintf(w, "You are using a 'slim' build of Coder, which does not support the %s subcommand.\n", pretty.Sprint(cliui.DefaultStyles.Code, cmd))
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Please use a build of Coder from GitHub releases:")
 	_, _ = fmt.Fprintln(w, "  https://github.com/coder/coder/releases")

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
 	"golang.org/x/xerrors"
 
@@ -75,7 +76,7 @@ func (r *RootCmd) create() *clibase.Cmd {
 
 			var template codersdk.Template
 			if templateName == "" {
-				_, _ = fmt.Fprintln(inv.Stdout, cliui.DefaultStyles.Wrap.Render("Select a template below to preview the provisioned infrastructure:"))
+				_, _ = fmt.Fprintln(inv.Stdout, pretty.Sprint(cliui.DefaultStyles.Wrap, "Select a template below to preview the provisioned infrastructure:"))
 
 				templates, err := client.TemplatesByOrganization(inv.Context(), organization.ID)
 				if err != nil {
@@ -177,7 +178,7 @@ func (r *RootCmd) create() *clibase.Cmd {
 				return xerrors.Errorf("watch build: %w", err)
 			}
 
-			_, _ = fmt.Fprintf(inv.Stdout, "\nThe %s workspace has been created at %s!\n", cliui.DefaultStyles.Keyword.Render(workspace.Name), cliui.DefaultStyles.DateTimeStamp.Render(time.Now().Format(time.Stamp)))
+			_, _ = fmt.Fprintf(inv.Stdout, "\nThe %s workspace has been created at %s!\n", pretty.Sprint(cliui.DefaultStyles.Keyword.Render(workspace.Name), cliui.DefaultStyles.DateTimeStamp, time.Now().Format(time.Stamp)))
 			return nil
 		},
 	}
