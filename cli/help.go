@@ -13,6 +13,7 @@ import (
 	"text/template"
 	"unicode"
 
+	"github.com/kr/pretty"
 	"github.com/mitchellh/go-wordwrap"
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/xerrors"
@@ -127,7 +128,7 @@ var usageTemplate = template.Must(
 				return opt.Flag
 			},
 			"prettyHeader": func(s string) string {
-				return cliui.DefaultStyles.Bold.Render(s)
+				return pretty.Sprint(cliui.DefaultStyles.Bold, s)
 			},
 			"isEnterprise": func(opt clibase.Option) bool {
 				return opt.Annotations.IsSet("enterprise")

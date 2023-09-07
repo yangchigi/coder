@@ -9,6 +9,7 @@ import (
 	"github.com/coder/coder/v2/cli/clibase"
 	"github.com/coder/coder/v2/cli/cliui"
 	"github.com/coder/coder/v2/codersdk"
+	"github.com/kr/pretty"
 )
 
 func (r *RootCmd) restart() *clibase.Cmd {
@@ -92,7 +93,7 @@ func (r *RootCmd) restart() *clibase.Cmd {
 				return err
 			}
 
-			_, _ = fmt.Fprintf(out, "\nThe %s workspace has been restarted at %s!\n", cliui.DefaultStyles.Keyword.Render(workspace.Name), cliui.DefaultStyles.DateTimeStamp.Render(time.Now().Format(time.Stamp)))
+			_, _ = fmt.Fprintf(out, "\nThe %s workspace has been restarted at %s!\n", pretty.Sprint(cliui.DefaultStyles.Keyword.Render(workspace.Name), cliui.DefaultStyles.DateTimeStamp, time.Now().Format(time.Stamp)))
 			return nil
 		},
 	}

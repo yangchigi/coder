@@ -15,6 +15,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/pretty"
 )
 
 func WorkspaceBuild(ctx context.Context, writer io.Writer, client *codersdk.Client, build uuid.UUID) error {
@@ -127,7 +128,7 @@ func ProvisionerJob(ctx context.Context, writer io.Writer, opts ProvisionerJobOp
 					return
 				}
 			}
-			_, _ = fmt.Fprintf(writer, DefaultStyles.FocusedPrompt.String()+DefaultStyles.Bold.Render("Gracefully canceling...")+"\n\n")
+			_, _ = fmt.Fprintf(writer, pretty.Sprint(DefaultStyles.FocusedPrompt.String()+DefaultStyles.Bold, "Gracefully canceling...")+"\n\n")
 			err := opts.Cancel()
 			if err != nil {
 				errChan <- xerrors.Errorf("cancel: %w", err)
