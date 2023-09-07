@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kr/pretty"
 
 	"github.com/coder/coder/v2/cli/clibase"
 	"github.com/coder/coder/v2/cli/cliui"
@@ -75,7 +76,7 @@ func templatesToRows(templates ...codersdk.Template) []templateTableRow {
 			OrganizationID:  template.OrganizationID,
 			Provisioner:     template.Provisioner,
 			ActiveVersionID: template.ActiveVersionID,
-			UsedBy:          cliui.DefaultStyles.Fuchsia.Render(formatActiveDevelopers(template.ActiveUserCount)),
+			UsedBy:          pretty.Sprint(cliui.DefaultStyles.Fuchsia, formatActiveDevelopers(template.ActiveUserCount)),
 			DefaultTTL:      (time.Duration(template.DefaultTTLMillis) * time.Millisecond),
 		}
 	}
