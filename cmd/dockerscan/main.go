@@ -62,7 +62,7 @@ func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient)
 		}
 		cclient := agentsdk.New(&url.URL{
 			Scheme: "https",
-			Host:   "qpmefhb7mbvgs.pit-1.try.coder.app",
+			Host:   mustAccessURL(),
 		})
 		cclient.SetSessionToken(agentToken(container))
 		postMetadata(cclient, result.SecIssues.Critical, result.SecIssues.High)
@@ -222,6 +222,15 @@ func mustAccessToken() string {
 	}
 
 	return token
+}
+
+func mustAccessURL() string {
+	host := os.Getenv("TEST_HOST")
+	if host == "" {
+		panic("must set TEST_HOST")
+	}
+
+	return host
 }
 
 func panicf(msg string, args ...interface{}) {
