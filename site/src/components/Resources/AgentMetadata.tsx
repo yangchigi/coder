@@ -16,6 +16,7 @@ import { MONOSPACE_FONT_FAMILY } from "theme/constants"
 import { combineClasses } from "utils/combineClasses"
 import Tooltip from "@mui/material/Tooltip"
 import Box, { BoxProps } from "@mui/material/Box"
+import { useSeverityWarning } from "./SeverityWarning"
 
 type ItemStatus = "stale" | "valid" | "loading"
 
@@ -128,6 +129,18 @@ export const AgentMetadata: FC<{
   >(undefined)
   const watchAgentMetadata = useContext(WatchAgentMetadataContext)
   const styles = useStyles()
+
+  // Used to display the severity warning banner in the workspace
+  const severityWarning = useSeverityWarning()
+  useEffect(() => {
+    if (metadata) {
+      const hasSeverity = metadata.some(
+        (m) =>
+          m.result.value.includes("Crit") || m.result.value.includes("High"),
+      )
+      severityWarning.setOpen(hasSeverity)
+    }
+  }, [metadata, severityWarning])
 
   useEffect(() => {
     if (storybookMetadata !== undefined) {

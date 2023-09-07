@@ -32,6 +32,10 @@ import { ChooseOne, Cond } from "components/Conditionals/ChooseOne"
 import AlertTitle from "@mui/material/AlertTitle"
 import { Maybe } from "components/Conditionals/Maybe"
 import dayjs from "dayjs"
+import {
+  SeverityWarningBanner,
+  useSeverityWarning,
+} from "components/Resources/SeverityWarning"
 
 export enum WorkspaceErrors {
   GET_BUILDS_ERROR = "getBuildsError",
@@ -112,6 +116,7 @@ export const Workspace: FC<React.PropsWithChildren<WorkspaceProps>> = ({
   const serverVersion = buildInfo?.version || ""
   const { t } = useTranslation("workspacePage")
   const { saveLocal, getLocal } = useLocalStorage()
+  const severityWarning = useSeverityWarning()
 
   const buildError = Boolean(workspaceErrors[WorkspaceErrors.BUILD_ERROR]) && (
     <ErrorAlert
@@ -221,6 +226,7 @@ export const Workspace: FC<React.PropsWithChildren<WorkspaceProps>> = ({
           className={styles.firstColumnSpacer}
           spacing={4}
         >
+          {severityWarning.open && <SeverityWarningBanner />}
           {buildError}
           {cancellationError}
           {workspace.latest_build.status === "running" &&

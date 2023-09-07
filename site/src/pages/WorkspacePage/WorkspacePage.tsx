@@ -11,6 +11,7 @@ import { ErrorAlert } from "components/Alert/ErrorAlert"
 import { useOrganizationId } from "hooks"
 import { isAxiosError } from "axios"
 import { Margins } from "components/Margins/Margins"
+import { SeverityWarningProvider } from "components/Resources/SeverityWarning"
 
 export const WorkspacePage: FC = () => {
   const params = useParams() as {
@@ -33,35 +34,37 @@ export const WorkspacePage: FC = () => {
   const pageError = error ?? getQuotaError
 
   return (
-    <RequirePermission
-      isFeatureVisible={
-        !(isAxiosError(pageError) && pageError.response?.status === 404)
-      }
-    >
-      <ChooseOne>
-        <Cond condition={Boolean(pageError)}>
-          <Margins>
-            <ErrorAlert error={pageError} sx={{ my: 2 }} />
-          </Margins>
-        </Cond>
-        <Cond
-          condition={
-            Boolean(workspace) &&
-            workspaceState.matches("ready") &&
-            quotaState.matches("success")
-          }
-        >
-          <WorkspaceReadyPage
-            workspaceState={workspaceState}
-            quotaState={quotaState}
-            workspaceSend={workspaceSend}
-          />
-        </Cond>
-        <Cond>
-          <Loader />
-        </Cond>
-      </ChooseOne>
-    </RequirePermission>
+    <SeverityWarningProvider>
+      <RequirePermission
+        isFeatureVisible={
+          !(isAxiosError(pageError) && pageError.response?.status === 404)
+        }
+      >
+        <ChooseOne>
+          <Cond condition={Boolean(pageError)}>
+            <Margins>
+              <ErrorAlert error={pageError} sx={{ my: 2 }} />
+            </Margins>
+          </Cond>
+          <Cond
+            condition={
+              Boolean(workspace) &&
+              workspaceState.matches("ready") &&
+              quotaState.matches("success")
+            }
+          >
+            <WorkspaceReadyPage
+              workspaceState={workspaceState}
+              quotaState={quotaState}
+              workspaceSend={workspaceSend}
+            />
+          </Cond>
+          <Cond>
+            <Loader />
+          </Cond>
+        </ChooseOne>
+      </RequirePermission>
+    </SeverityWarningProvider>
   )
 }
 
