@@ -3,8 +3,7 @@ package cliui
 import (
 	"os"
 
-	"github.com/charmbracelet/charm/ui/common"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/coder/pretty"
 	"github.com/muesli/termenv"
 	"golang.org/x/xerrors"
 )
@@ -15,55 +14,70 @@ var Canceled = xerrors.New("canceled")
 var DefaultStyles Styles
 
 type Styles struct {
-	Bold,
-	Checkmark,
 	Code,
-	Crossmark,
 	DateTimeStamp,
 	Error,
 	Field,
 	Keyword,
-	Paragraph,
 	Placeholder,
 	Prompt,
 	FocusedPrompt,
 	Fuchsia,
-	Logo,
 	Warn,
-	Wrap lipgloss.Style
+	Wrap pretty.Style
 }
 
+var color = termenv.NewOutput(os.Stdout).ColorProfile()
+
+var (
+	Green   = color.Color("#04B575")
+	Red     = color.Color("#ED567A")
+	Fuschia = color.Color("#EE6FF8")
+	Yellow  = color.Color("#ECFD65")
+)
+
 func init() {
-	lipgloss.SetDefaultRenderer(
-		lipgloss.NewRenderer(os.Stdout, termenv.WithColorCache(true)),
-	)
-
-	// All Styles are set after we change the DefaultRenderer so that the ColorCache
-	// is in effect, mitigating the severe performance issue seen here:
-	// https://github.com/coder/coder/issues/7884.
-
-	charmStyles := common.DefaultStyles()
-
+	// We do not adapt the color based on whether the terminal is light or dark.
+	// Doing so would require a round-trip between the program and the terminal
+	// due to the OSC query and response.
 	DefaultStyles = Styles{
-		Bold:          lipgloss.NewStyle().Bold(true),
-		Checkmark:     charmStyles.Checkmark,
-		Code:          charmStyles.Code,
-		Crossmark:     charmStyles.Error.Copy().SetString("✘"),
-		DateTimeStamp: charmStyles.LabelDim,
-		Error:         charmStyles.Error,
-		Field:         charmStyles.Code.Copy().Foreground(lipgloss.AdaptiveColor{Light: "#000000", Dark: "#FFFFFF"}),
-		Keyword:       charmStyles.Keyword,
-		Paragraph:     charmStyles.Paragraph,
-		Placeholder:   lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#585858", Dark: "#4d46b3"}),
-		Prompt:        charmStyles.Prompt.Copy().Foreground(lipgloss.AdaptiveColor{Light: "#9B9B9B", Dark: "#5C5C5C"}),
-		FocusedPrompt: charmStyles.FocusedPrompt.Copy().Foreground(lipgloss.Color("#651fff")),
-		Fuchsia:       charmStyles.SelectedMenuItem.Copy(),
-		Logo:          charmStyles.Logo.Copy().SetString("Coder"),
-		Warn: lipgloss.NewStyle().Foreground(
-			lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"},
-		),
-		Wrap: lipgloss.NewStyle().Width(80),
+		Code: pretty.Style{
+			pretty.XPad(1, 1),
+			pretty.FgColor(Red),
+		},
+		DateTimeStamp: pretty.Style{
+			pretty.FgColor(color.Color("#7571F9")),
+		},
+		Error: pretty.Style{
+			pretty.FgColor(Red),
+		},
+		Field: pretty.Style{
+			pretty.XPad(1, 1),
+			pretty.FgColor(color.Color("#FFFFFF")),
+			pretty.BgColor(color.Color("#2b2a2a")),
+		},
+		Keyword: pretty.Style{
+			pretty.FgColor(Green),
+		},
+		Placeholder: pretty.Style{
+			pretty.FgColor(color.Color("#4d46b3")),
+		},
+		Prompt: pretty.Style{
+			pretty.FgColor(color.Color("#5C5C5C")),
+			pretty.Wrap(">", ""),
+		},
+		Warn: pretty.Style{
+			pretty.FgColor(Yellow),
+		},
+		Wrap: pretty.Style{
+			pretty.LineWrap(80),
+		},
 	}
+
+	DefaultStyles.FocusedPrompt = append(
+		DefaultStyles.Prompt,
+		pretty.FgColor(Fuschia),
+	)
 }
 
 // ValidateNotEmpty is a helper function to disallow empty inputs!

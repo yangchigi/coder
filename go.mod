@@ -249,6 +249,7 @@ require (
 	github.com/charmbracelet/bubbletea v0.23.2 // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
 	github.com/cloudflare/circl v1.3.3 // indirect
+	github.com/coder/pretty v0.0.0-20230907001932-551a4cf8ebc1 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/containerd/continuity v0.4.2-0.20230616210509-1e0d26eb2381 // indirect
 	github.com/coreos/go-iptables v0.6.0 // indirect
