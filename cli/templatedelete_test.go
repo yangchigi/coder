@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/coder/v2/cli/clitest"
@@ -37,7 +38,7 @@ func TestTemplateDelete(t *testing.T) {
 			execDone <- inv.Run()
 		}()
 
-		pty.ExpectMatch(fmt.Sprintf("Delete these templates: %s?", cliui.DefaultStyles.Code.Render(template.Name)))
+		pty.ExpectMatch(fmt.Sprintf("Delete these templates: %s?", pretty.Sprint(cliui.DefaultStyles.Code, template.Name)))
 		pty.WriteLine("yes")
 
 		require.NoError(t, <-execDone)
@@ -95,7 +96,7 @@ func TestTemplateDelete(t *testing.T) {
 			execDone <- inv.Run()
 		}()
 
-		pty.ExpectMatch(fmt.Sprintf("Delete these templates: %s?", cliui.DefaultStyles.Code.Render(strings.Join(templateNames, ", "))))
+		pty.ExpectMatch(fmt.Sprintf("Delete these templates: %s?", pretty.Sprint(cliui.DefaultStyles.Code, strings.Join(templateNames, ", "))))
 		pty.WriteLine("yes")
 
 		require.NoError(t, <-execDone)
