@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -141,7 +142,7 @@ func TestLogin(t *testing.T) {
 
 		// Validate that we reprompt for matching passwords.
 		pty.ExpectMatch("Passwords do not match")
-		pty.ExpectMatch("Enter a " + cliui.DefaultStyles.Field.Render("password"))
+		pty.ExpectMatch("Enter a " + pretty.Sprint(cliui.DefaultStyles.Field, "password"))
 
 		pty.WriteLine("SomeSecurePassword!")
 		pty.ExpectMatch("Confirm")
