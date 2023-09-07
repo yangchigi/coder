@@ -14,7 +14,7 @@ coder config-ssh [flags]
 
 ```console
   - You can use -o (or --ssh-option) so set SSH options to be used for all your
-    workspaces:
+workspaces:
 
       $ coder config-ssh -o ForwardAgent=yes
 
