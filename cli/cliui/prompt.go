@@ -14,6 +14,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/cli/clibase"
+	"github.com/coder/pretty"
 )
 
 // PromptOptions supply a set of options to the prompt.
@@ -60,16 +61,16 @@ func Prompt(inv *clibase.Invocation, opts PromptOptions) (string, error) {
 		if len(opts.Default) == 0 {
 			opts.Default = ConfirmYes
 		}
-		renderedYes := DefaultStyles.Placeholder.Render(ConfirmYes)
-		renderedNo := DefaultStyles.Placeholder.Render(ConfirmNo)
+		renderedYes := pretty.Sprint(DefaultStyles.Placeholder, ConfirmYes)
+		renderedNo := pretty.Sprint(DefaultStyles.Placeholder, ConfirmNo)
 		if opts.Default == ConfirmYes {
-			renderedYes = DefaultStyles.Bold.Render(ConfirmYes)
+			renderedYes = pretty.Sprint(DefaultStyles.Bold, ConfirmYes)
 		} else {
-			renderedNo = DefaultStyles.Bold.Render(ConfirmNo)
+			renderedNo = pretty.Sprint(DefaultStyles.Bold, ConfirmNo)
 		}
-		_, _ = fmt.Fprint(inv.Stdout, DefaultStyles.Placeholder.Render("("+renderedYes+DefaultStyles.Placeholder.Render("/"+renderedNo+DefaultStyles.Placeholder.Render(") "))))
+		_, _ = fmt.Fprint(inv.Stdout, pretty.Sprint(DefaultStyles.Placeholder.Render("("+renderedYes+DefaultStyles.Placeholder.Render("/"+renderedNo+DefaultStyles.Placeholder, ") "))))
 	} else if opts.Default != "" {
-		_, _ = fmt.Fprint(inv.Stdout, DefaultStyles.Placeholder.Render("("+opts.Default+") "))
+		_, _ = fmt.Fprint(inv.Stdout, pretty.Sprint(DefaultStyles.Placeholder, "("+opts.Default+") "))
 	}
 	interrupt := make(chan os.Signal, 1)
 
@@ -126,7 +127,7 @@ func Prompt(inv *clibase.Invocation, opts PromptOptions) (string, error) {
 		if opts.Validate != nil {
 			err := opts.Validate(line)
 			if err != nil {
-				_, _ = fmt.Fprintln(inv.Stdout, DefaultStyles.Error.Render(err.Error()))
+				_, _ = fmt.Fprintln(inv.Stdout, pretty.Sprint(DefaultStyles.Error, err.Error()))
 				return Prompt(inv, opts)
 			}
 		}

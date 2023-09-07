@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kr/pretty"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/cli/clibase"
@@ -101,7 +102,7 @@ func templateVersionsToRows(activeVersionID uuid.UUID, templateVersions ...coder
 	for i, templateVersion := range templateVersions {
 		activeStatus := ""
 		if templateVersion.ID == activeVersionID {
-			activeStatus = cliui.DefaultStyles.Code.Render(cliui.DefaultStyles.Keyword.Render("Active"))
+			activeStatus = pretty.Sprint(cliui.DefaultStyles.Code.Render(cliui.DefaultStyles.Keyword, "Active"))
 		}
 
 		rows[i] = templateVersionRow{
