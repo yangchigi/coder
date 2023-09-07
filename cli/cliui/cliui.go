@@ -48,6 +48,7 @@ var (
 	Red     = color.Color("#ED567A")
 	Fuchsia = color.Color("#EE6FF8")
 	Yellow  = color.Color("#ECFD65")
+	Gold    = color.Color("#ffd700")
 	Blue    = color.Color("#5000ff")
 )
 
