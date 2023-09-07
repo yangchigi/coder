@@ -21,6 +21,7 @@ import (
 
 	"github.com/coder/coder/v2/coderd/database"
 	"github.com/coder/coder/v2/coderd/database/db2sdk"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
 	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/coderd/rbac"
 	"github.com/coder/coder/v2/coderd/rbac/regosql"
@@ -29,6 +30,11 @@ import (
 )
 
 var validProxyByHostnameRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+var errForeignKeyConstraint = &pq.Error{
+	Code:    "23503",
+	Message: "update or delete on table violates foreign key constraint",
+}
 
 var errDuplicateKey = &pq.Error{
 	Code:    "23505",
@@ -44,6 +50,7 @@ func New() database.Store {
 			organizationMembers:       make([]database.OrganizationMember, 0),
 			organizations:             make([]database.Organization, 0),
 			users:                     make([]database.User, 0),
+			dbcryptKeys:               make([]database.DBCryptKey, 0),
 			gitAuthLinks:              make([]database.GitAuthLink, 0),
 			groups:                    make([]database.Group, 0),
 			groupMembers:              make([]database.GroupMember, 0),
@@ -116,6 +123,7 @@ type data struct {
 	// New tables
 	workspaceAgentStats           []database.WorkspaceAgentStat
 	auditLogs                     []database.AuditLog
+	dbcryptKeys                   []database.DBCryptKey
 	files                         []database.File
 	gitAuthLinks                  []database.GitAuthLink
 	gitSSHKey                     []database.GitSSHKey
@@ -300,7 +308,7 @@ func mapAgentStatus(dbAgent database.WorkspaceAgent, agentInactiveDisconnectTime
 	switch {
 	case !dbAgent.FirstConnectedAt.Valid:
 		switch {
-		case connectionTimeout > 0 && database.Now().Sub(dbAgent.CreatedAt) > connectionTimeout:
+		case connectionTimeout > 0 && dbtime.Now().Sub(dbAgent.CreatedAt) > connectionTimeout:
 			// If the agent took too long to connect the first time,
 			// mark it as timed out.
 			status = "timeout"
@@ -313,7 +321,7 @@ func mapAgentStatus(dbAgent database.WorkspaceAgent, agentInactiveDisconnectTime
 		// If we've disconnected after our last connection, we know the
 		// agent is no longer connected.
 		status = "disconnected"
-	case database.Now().Sub(dbAgent.LastConnectedAt.Time) > time.Duration(agentInactiveDisconnectTimeoutSeconds)*time.Second:
+	case dbtime.Now().Sub(dbAgent.LastConnectedAt.Time) > time.Duration(agentInactiveDisconnectTimeoutSeconds)*time.Second:
 		// The connection died without updating the last connected.
 		status = "disconnected"
 	case dbAgent.LastConnectedAt.Valid:
@@ -662,6 +670,19 @@ func (q *FakeQuerier) isEveryoneGroup(id uuid.UUID) bool {
 		}
 	}
 	return false
+}
+
+func (q *FakeQuerier) GetActiveDBCryptKeys(_ context.Context) ([]database.DBCryptKey, error) {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	ks := make([]database.DBCryptKey, 0, len(q.dbcryptKeys))
+	for _, k := range q.dbcryptKeys {
+		if !k.ActiveKeyDigest.Valid {
+			continue
+		}
+		ks = append([]database.DBCryptKey{}, k)
+	}
+	return ks, nil
 }
 
 func (*FakeQuerier) AcquireLock(_ context.Context, _ int64) error {
@@ -1150,6 +1171,14 @@ func (q *FakeQuerier) GetAuthorizationUserRoles(_ context.Context, userID uuid.U
 	}, nil
 }
 
+func (q *FakeQuerier) GetDBCryptKeys(_ context.Context) ([]database.DBCryptKey, error) {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	ks := make([]database.DBCryptKey, 0)
+	ks = append(ks, q.dbcryptKeys...)
+	return ks, nil
+}
+
 func (q *FakeQuerier) GetDERPMeshKey(_ context.Context) (string, error) {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
@@ -1390,6 +1419,18 @@ func (q *FakeQuerier) GetGitAuthLink(_ context.Context, arg database.GetGitAuthL
 		return gitAuthLink, nil
 	}
 	return database.GitAuthLink{}, sql.ErrNoRows
+}
+
+func (q *FakeQuerier) GetGitAuthLinksByUserID(_ context.Context, userID uuid.UUID) ([]database.GitAuthLink, error) {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	gals := make([]database.GitAuthLink, 0)
+	for _, gal := range q.gitAuthLinks {
+		if gal.UserID == userID {
+			gals = append(gals, gal)
+		}
+	}
+	return gals, nil
 }
 
 func (q *FakeQuerier) GetGitSSHKey(_ context.Context, userID uuid.UUID) (database.GitSSHKey, error) {
@@ -2832,6 +2873,18 @@ func (q *FakeQuerier) GetUserLinkByUserIDLoginType(_ context.Context, params dat
 	return database.UserLink{}, sql.ErrNoRows
 }
 
+func (q *FakeQuerier) GetUserLinksByUserID(_ context.Context, userID uuid.UUID) ([]database.UserLink, error) {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	uls := make([]database.UserLink, 0)
+	for _, ul := range q.userLinks {
+		if ul.UserID == userID {
+			uls = append(uls, ul)
+		}
+	}
+	return uls, nil
+}
+
 func (q *FakeQuerier) GetUsers(_ context.Context, params database.GetUsersParams) ([]database.GetUsersRow, error) {
 	if err := validateDatabaseType(params); err != nil {
 		return nil, err
@@ -3758,7 +3811,7 @@ func (q *FakeQuerier) GetWorkspacesEligibleForTransition(ctx context.Context, no
 			continue
 		}
 
-		template, err := q.GetTemplateByID(ctx, workspace.TemplateID)
+		template, err := q.getTemplateByIDNoLock(ctx, workspace.TemplateID)
 		if err != nil {
 			return nil, xerrors.Errorf("get template by ID: %w", err)
 		}
@@ -3845,6 +3898,26 @@ func (q *FakeQuerier) InsertAuditLog(_ context.Context, arg database.InsertAudit
 	return alog, nil
 }
 
+func (q *FakeQuerier) InsertDBCryptKey(_ context.Context, arg database.InsertDBCryptKeyParams) error {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return err
+	}
+
+	for _, key := range q.dbcryptKeys {
+		if key.Number == arg.Number {
+			return errDuplicateKey
+		}
+	}
+
+	q.dbcryptKeys = append(q.dbcryptKeys, database.DBCryptKey{
+		Number:          arg.Number,
+		ActiveKeyDigest: sql.NullString{String: arg.ActiveKeyDigest, Valid: true},
+		Test:            arg.Test,
+	})
+	return nil
+}
+
 func (q *FakeQuerier) InsertDERPMeshKey(_ context.Context, id string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -3891,13 +3964,15 @@ func (q *FakeQuerier) InsertGitAuthLink(_ context.Context, arg database.InsertGi
 	defer q.mutex.Unlock()
 	// nolint:gosimple
 	gitAuthLink := database.GitAuthLink{
-		ProviderID:        arg.ProviderID,
-		UserID:            arg.UserID,
-		CreatedAt:         arg.CreatedAt,
-		UpdatedAt:         arg.UpdatedAt,
-		OAuthAccessToken:  arg.OAuthAccessToken,
-		OAuthRefreshToken: arg.OAuthRefreshToken,
-		OAuthExpiry:       arg.OAuthExpiry,
+		ProviderID:             arg.ProviderID,
+		UserID:                 arg.UserID,
+		CreatedAt:              arg.CreatedAt,
+		UpdatedAt:              arg.UpdatedAt,
+		OAuthAccessToken:       arg.OAuthAccessToken,
+		OAuthAccessTokenKeyID:  arg.OAuthAccessTokenKeyID,
+		OAuthRefreshToken:      arg.OAuthRefreshToken,
+		OAuthRefreshTokenKeyID: arg.OAuthRefreshTokenKeyID,
+		OAuthExpiry:            arg.OAuthExpiry,
 	}
 	q.gitAuthLinks = append(q.gitAuthLinks, gitAuthLink)
 	return gitAuthLink, nil
@@ -4361,12 +4436,14 @@ func (q *FakeQuerier) InsertUserLink(_ context.Context, args database.InsertUser
 
 	//nolint:gosimple
 	link := database.UserLink{
-		UserID:            args.UserID,
-		LoginType:         args.LoginType,
-		LinkedID:          args.LinkedID,
-		OAuthAccessToken:  args.OAuthAccessToken,
-		OAuthRefreshToken: args.OAuthRefreshToken,
-		OAuthExpiry:       args.OAuthExpiry,
+		UserID:                 args.UserID,
+		LoginType:              args.LoginType,
+		LinkedID:               args.LinkedID,
+		OAuthAccessToken:       args.OAuthAccessToken,
+		OAuthAccessTokenKeyID:  args.OAuthAccessTokenKeyID,
+		OAuthRefreshToken:      args.OAuthRefreshToken,
+		OAuthRefreshTokenKeyID: args.OAuthRefreshTokenKeyID,
+		OAuthExpiry:            args.OAuthExpiry,
 	}
 
 	q.userLinks = append(q.userLinks, link)
@@ -4784,12 +4861,52 @@ func (q *FakeQuerier) RegisterWorkspaceProxy(_ context.Context, arg database.Reg
 			p.WildcardHostname = arg.WildcardHostname
 			p.DerpEnabled = arg.DerpEnabled
 			p.DerpOnly = arg.DerpOnly
-			p.UpdatedAt = database.Now()
+			p.UpdatedAt = dbtime.Now()
 			q.workspaceProxies[i] = p
 			return p, nil
 		}
 	}
 	return database.WorkspaceProxy{}, sql.ErrNoRows
+}
+
+func (q *FakeQuerier) RevokeDBCryptKey(_ context.Context, activeKeyDigest string) error {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	for i := range q.dbcryptKeys {
+		key := q.dbcryptKeys[i]
+
+		// Is the key already revoked?
+		if !key.ActiveKeyDigest.Valid {
+			continue
+		}
+
+		if key.ActiveKeyDigest.String != activeKeyDigest {
+			continue
+		}
+
+		// Check for foreign key constraints.
+		for _, ul := range q.userLinks {
+			if (ul.OAuthAccessTokenKeyID.Valid && ul.OAuthAccessTokenKeyID.String == activeKeyDigest) ||
+				(ul.OAuthRefreshTokenKeyID.Valid && ul.OAuthRefreshTokenKeyID.String == activeKeyDigest) {
+				return errForeignKeyConstraint
+			}
+		}
+		for _, gal := range q.gitAuthLinks {
+			if (gal.OAuthAccessTokenKeyID.Valid && gal.OAuthAccessTokenKeyID.String == activeKeyDigest) ||
+				(gal.OAuthRefreshTokenKeyID.Valid && gal.OAuthRefreshTokenKeyID.String == activeKeyDigest) {
+				return errForeignKeyConstraint
+			}
+		}
+
+		// Revoke the key.
+		q.dbcryptKeys[i].RevokedAt = sql.NullTime{Time: dbtime.Now(), Valid: true}
+		q.dbcryptKeys[i].RevokedKeyDigest = sql.NullString{String: key.ActiveKeyDigest.String, Valid: true}
+		q.dbcryptKeys[i].ActiveKeyDigest = sql.NullString{}
+		return nil
+	}
+
+	return sql.ErrNoRows
 }
 
 func (*FakeQuerier) TryAcquireLock(_ context.Context, _ int64) (bool, error) {
@@ -4833,7 +4950,9 @@ func (q *FakeQuerier) UpdateGitAuthLink(_ context.Context, arg database.UpdateGi
 		}
 		gitAuthLink.UpdatedAt = arg.UpdatedAt
 		gitAuthLink.OAuthAccessToken = arg.OAuthAccessToken
+		gitAuthLink.OAuthAccessTokenKeyID = arg.OAuthAccessTokenKeyID
 		gitAuthLink.OAuthRefreshToken = arg.OAuthRefreshToken
+		gitAuthLink.OAuthRefreshTokenKeyID = arg.OAuthRefreshTokenKeyID
 		gitAuthLink.OAuthExpiry = arg.OAuthExpiry
 		q.gitAuthLinks[index] = gitAuthLink
 
@@ -5099,7 +5218,7 @@ func (q *FakeQuerier) UpdateTemplateMetaByID(_ context.Context, arg database.Upd
 		if tpl.ID != arg.ID {
 			continue
 		}
-		tpl.UpdatedAt = database.Now()
+		tpl.UpdatedAt = dbtime.Now()
 		tpl.Name = arg.Name
 		tpl.DisplayName = arg.DisplayName
 		tpl.Description = arg.Description
@@ -5125,7 +5244,7 @@ func (q *FakeQuerier) UpdateTemplateScheduleByID(_ context.Context, arg database
 		}
 		tpl.AllowUserAutostart = arg.AllowUserAutostart
 		tpl.AllowUserAutostop = arg.AllowUserAutostop
-		tpl.UpdatedAt = database.Now()
+		tpl.UpdatedAt = dbtime.Now()
 		tpl.DefaultTTL = arg.DefaultTTL
 		tpl.MaxTTL = arg.MaxTTL
 		tpl.AutostopRequirementDaysOfWeek = arg.AutostopRequirementDaysOfWeek
@@ -5305,7 +5424,9 @@ func (q *FakeQuerier) UpdateUserLink(_ context.Context, params database.UpdateUs
 	for i, link := range q.userLinks {
 		if link.UserID == params.UserID && link.LoginType == params.LoginType {
 			link.OAuthAccessToken = params.OAuthAccessToken
+			link.OAuthAccessTokenKeyID = params.OAuthAccessTokenKeyID
 			link.OAuthRefreshToken = params.OAuthRefreshToken
+			link.OAuthRefreshTokenKeyID = params.OAuthRefreshTokenKeyID
 			link.OAuthExpiry = params.OAuthExpiry
 
 			q.userLinks[i] = link
@@ -5712,7 +5833,7 @@ func (q *FakeQuerier) UpdateWorkspaceDormantDeletingAt(_ context.Context, arg da
 		}
 		workspace.DormantAt = arg.DormantAt
 		if workspace.DormantAt.Time.IsZero() {
-			workspace.LastUsedAt = database.Now()
+			workspace.LastUsedAt = dbtime.Now()
 			workspace.DeletingAt = sql.NullTime{}
 		}
 		if !workspace.DormantAt.Time.IsZero() {
@@ -5791,7 +5912,7 @@ func (q *FakeQuerier) UpdateWorkspaceProxyDeleted(_ context.Context, arg databas
 	for i, p := range q.workspaceProxies {
 		if p.ID == arg.ID {
 			p.Deleted = arg.Deleted
-			p.UpdatedAt = database.Now()
+			p.UpdatedAt = dbtime.Now()
 			q.workspaceProxies[i] = p
 			return nil
 		}

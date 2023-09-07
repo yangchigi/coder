@@ -16,6 +16,8 @@ import (
 
 	"cdr.dev/slog"
 	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/coderd/httpapi/httpapiconstraints"
 	"github.com/coder/coder/v2/coderd/rbac"
 	"github.com/coder/coder/v2/coderd/util/slice"
 )
@@ -35,8 +37,16 @@ type NotAuthorizedError struct {
 	Err error
 }
 
+// Ensure we implement the IsUnauthorized interface.
+var _ httpapiconstraints.IsUnauthorizedError = (*NotAuthorizedError)(nil)
+
 func (e NotAuthorizedError) Error() string {
 	return fmt.Sprintf("unauthorized: %s", e.Err.Error())
+}
+
+// IsUnauthorized implements the IsUnauthorized interface.
+func (NotAuthorizedError) IsUnauthorized() bool {
+	return true
 }
 
 // Unwrap will always unwrap to a sql.ErrNoRows so the API returns a 404.
@@ -580,7 +590,7 @@ func (q *querier) SoftDeleteTemplateByID(ctx context.Context, id uuid.UUID) erro
 		return q.db.UpdateTemplateDeletedByID(ctx, database.UpdateTemplateDeletedByIDParams{
 			ID:        id,
 			Deleted:   true,
-			UpdatedAt: database.Now(),
+			UpdatedAt: dbtime.Now(),
 		})
 	}
 	return deleteQ(q.log, q.auth, q.db.GetTemplateByID, deleteF)(ctx, id)
@@ -828,6 +838,13 @@ func (q *querier) GetAuthorizationUserRoles(ctx context.Context, userID uuid.UUI
 	return q.db.GetAuthorizationUserRoles(ctx, userID)
 }
 
+func (q *querier) GetDBCryptKeys(ctx context.Context) ([]database.DBCryptKey, error) {
+	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
+		return nil, err
+	}
+	return q.db.GetDBCryptKeys(ctx)
+}
+
 func (q *querier) GetDERPMeshKey(ctx context.Context) (string, error) {
 	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
 		return "", err
@@ -902,6 +919,13 @@ func (q *querier) GetFileTemplates(ctx context.Context, fileID uuid.UUID) ([]dat
 
 func (q *querier) GetGitAuthLink(ctx context.Context, arg database.GetGitAuthLinkParams) (database.GitAuthLink, error) {
 	return fetch(q.log, q.auth, q.db.GetGitAuthLink)(ctx, arg)
+}
+
+func (q *querier) GetGitAuthLinksByUserID(ctx context.Context, userID uuid.UUID) ([]database.GitAuthLink, error) {
+	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
+		return nil, err
+	}
+	return q.db.GetGitAuthLinksByUserID(ctx, userID)
 }
 
 func (q *querier) GetGitSSHKey(ctx context.Context, userID uuid.UUID) (database.GitSSHKey, error) {
@@ -1472,6 +1496,13 @@ func (q *querier) GetUserLinkByUserIDLoginType(ctx context.Context, arg database
 	return q.db.GetUserLinkByUserIDLoginType(ctx, arg)
 }
 
+func (q *querier) GetUserLinksByUserID(ctx context.Context, userID uuid.UUID) ([]database.UserLink, error) {
+	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
+		return nil, err
+	}
+	return q.db.GetUserLinksByUserID(ctx, userID)
+}
+
 func (q *querier) GetUsers(ctx context.Context, arg database.GetUsersParams) ([]database.GetUsersRow, error) {
 	// This does the filtering in SQL.
 	prep, err := prepareSQLFilter(ctx, q.auth, rbac.ActionRead, rbac.ResourceUser.Type)
@@ -1835,6 +1866,13 @@ func (q *querier) InsertAuditLog(ctx context.Context, arg database.InsertAuditLo
 	return insert(q.log, q.auth, rbac.ResourceAuditLog, q.db.InsertAuditLog)(ctx, arg)
 }
 
+func (q *querier) InsertDBCryptKey(ctx context.Context, arg database.InsertDBCryptKeyParams) error {
+	if err := q.authorizeContext(ctx, rbac.ActionCreate, rbac.ResourceSystem); err != nil {
+		return err
+	}
+	return q.db.InsertDBCryptKey(ctx, arg)
+}
+
 func (q *querier) InsertDERPMeshKey(ctx context.Context, value string) error {
 	if err := q.authorizeContext(ctx, rbac.ActionCreate, rbac.ResourceSystem); err != nil {
 		return err
@@ -2132,6 +2170,13 @@ func (q *querier) RegisterWorkspaceProxy(ctx context.Context, arg database.Regis
 		return q.db.GetWorkspaceProxyByID(ctx, arg.ID)
 	}
 	return updateWithReturn(q.log, q.auth, fetch, q.db.RegisterWorkspaceProxy)(ctx, arg)
+}
+
+func (q *querier) RevokeDBCryptKey(ctx context.Context, activeKeyDigest string) error {
+	if err := q.authorizeContext(ctx, rbac.ActionUpdate, rbac.ResourceSystem); err != nil {
+		return err
+	}
+	return q.db.RevokeDBCryptKey(ctx, activeKeyDigest)
 }
 
 func (q *querier) TryAcquireLock(ctx context.Context, id int64) (bool, error) {
