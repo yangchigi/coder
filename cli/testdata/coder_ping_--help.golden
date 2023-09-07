@@ -1,8 +1,11 @@
-Usage: coder ping [flags] <workspace>
+coder v0.0.0-devel
 
-Ping a workspace
+USAGE:
+  coder ping [flags] <workspace>
 
-[1mOptions[0m
+  Ping a workspace
+
+OPTIONS:
   -n, --num int (default: 10)
           Specifies the number of pings to perform.
 

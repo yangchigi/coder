@@ -1,14 +1,15 @@
-Usage: coder templates versions
+coder v0.0.0-devel
 
-Manage different versions of the specified template
+USAGE:
+  coder templates versions
 
-Aliases: version
+  Manage different versions of the specified template
 
-- List versions of a specific template:
+  Aliases: version  - List versions of a specific template:
+  
+  $ coder templates versions list my-template
 
-     $ coder templates versions list my-template
-
-[1mSubcommands[0m
+SUBCOMMANDS:
     list    List all the versions of the specified template
 
 ---
