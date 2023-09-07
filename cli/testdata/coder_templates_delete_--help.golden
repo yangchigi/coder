@@ -1,10 +1,13 @@
-Usage: coder templates delete [flags] [name...]
+coder v0.0.0-devel
 
-Delete templates
+USAGE:
+  coder templates delete [flags] [name...]
 
-Aliases: rm
+  Delete templates
 
-[1mOptions[0m
+  Aliases: rm
+
+OPTIONS:
   -y, --yes bool
           Bypass prompts.
 
