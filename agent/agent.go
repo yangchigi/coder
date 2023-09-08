@@ -406,7 +406,7 @@ func (a *agent) reportMetadataLoop(ctx context.Context) {
 		// mutex logic and overloading the API.
 		for _, md := range manifest.Metadata {
 			md := md
-			if md.Key == "99_image_vuln" {
+			if md.Key == "99_image_vuln" || md.Key == "99_image_id" {
 				logger.Debug(ctx, "skipping jfrog field")
 				continue
 			}

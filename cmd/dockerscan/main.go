@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coreos/go-systemd/daemon"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -28,7 +28,8 @@ import (
 const (
 	defaultRepo         = "docker-local"
 	defaultScanInterval = time.Second * 5
-	defaultMetadataKey  = "99_image_vuln"
+	defaultVulnMetaKey  = "99_image_vuln"
+	defaultImgMetaKey   = "99_image_id"
 )
 
 func main() {
@@ -44,6 +45,9 @@ func main() {
 	if err != nil {
 		fmt.Printf("err: %v\n", err)
 	}
+
+	_, err = daemon.SdNotify(false, daemon.SdNotifyReady)
+	must(err)
 
 	for range ticker.C {
 		err := listVulns(dclient, jclient)
@@ -81,13 +85,8 @@ func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient)
 			return nil
 		}
 		accessurl := mustAccessURL()
-		host, _, err := net.SplitHostPort(accessurl)
-		if err != nil {
-			return xerrors.Errorf("split host post %s: %w", accessurl, err)
-		}
-
 		scheme := "https"
-		if strings.Contains(host, "localhost") {
+		if strings.HasPrefix(accessurl, "localhost") {
 			scheme = "http"
 		}
 
@@ -96,7 +95,7 @@ func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient)
 			Host:   accessurl,
 		})
 		cclient.SetSessionToken(agentToken(container))
-		err = postMetadata(cclient, result.SecIssues.Critical, result.SecIssues.High)
+		err = postMetadata(cclient, repo, result.SecIssues.Critical, result.SecIssues.High)
 		if err != nil {
 			return err
 		}
@@ -108,7 +107,7 @@ func listVulns(dclient *client.Client, jclient *jfroghttpclient.JfrogHttpClient)
 	return nil
 }
 
-func postMetadata(cclient *agentsdk.Client, critical int, high int) error {
+func postMetadata(cclient *agentsdk.Client, image string, critical int, high int) error {
 	var errStr string
 	var value string
 	if critical > 0 || high > 0 {
@@ -119,14 +118,24 @@ func postMetadata(cclient *agentsdk.Client, critical int, high int) error {
 	}
 	fmt.Println("error: ", errStr)
 	fmt.Println("value: ", value)
-	err := cclient.PostMetadata(context.Background(), defaultMetadataKey, agentsdk.PostMetadataRequest{
+
+	err := cclient.PostMetadata(context.Background(), defaultVulnMetaKey, agentsdk.PostMetadataRequest{
 		CollectedAt: time.Now(),
 		Age:         0,
 		Value:       value,
 		Error:       errStr,
 	})
 	if err != nil {
-		return xerrors.Errorf("post metadata: %w", err)
+		return xerrors.Errorf("post vuln metadata: %w", err)
+	}
+
+	err = cclient.PostMetadata(context.Background(), defaultImgMetaKey, agentsdk.PostMetadataRequest{
+		CollectedAt: time.Now(),
+		Age:         0,
+		Value:       image,
+	})
+	if err != nil {
+		return xerrors.Errorf("post img metadata: %w", err)
 	}
 	return nil
 }

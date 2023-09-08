@@ -138,8 +138,16 @@ export const AgentMetadata: FC<{
         (m) =>
           m.result.value.includes("Crit") || m.result.value.includes("High"),
       )
+      const metaImg = metadata.find((m) => m.description.key === "99_image_id")
+      if (metaImg) {
+        severityWarning.setImage(metaImg.result.value)
+      } else {
+        severityWarning.setImage("")
+      }
       if (metaWithSeverity) {
         severityWarning.setSeverity(metaWithSeverity.result.value)
+      } else {
+        severityWarning.setSeverity("")
       }
     }
   }, [metadata, severityWarning])

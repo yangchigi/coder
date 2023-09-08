@@ -6,12 +6,22 @@ import { Alert } from "components/Alert/Alert"
 import { ReactNode, createContext, useContext, useState } from "react"
 
 const REVIEW_RESULTS_URL =
-  "https://cdr.jfrog.io/ui/scans-list/repositories/docker-local/scan-descendants"
+  "https://cdr.jfrog.io/ui/scans-list/packages-scans/dev/scan-descendants/"
+
+export const resultsURL = (image: string): string => {
+  const imgtag = image.split("/")[1]
+  const img = imgtag.split(":")[0]
+  const tag = imgtag.split(":")[1]
+
+  return `https://cdr.jfrog.io/ui/scans-list/packages-scans/${img}/scan-descendants/${tag}?package_id=docker://${img}&version=${tag}`
+}
 
 const SeverityWarningContext = createContext<
   | {
       severity?: string
       setSeverity: (value: string) => void
+      image?: string
+      setImage: (value: string) => void
     }
   | undefined
 >(undefined)
@@ -22,20 +32,23 @@ export const SeverityWarningProvider = ({
   children: ReactNode
 }) => {
   const [severity, setSeverity] = useState<undefined | string>()
+  const [image, setImage] = useState<undefined | string>()
 
   return (
-    <SeverityWarningContext.Provider value={{ severity, setSeverity }}>
+    <SeverityWarningContext.Provider
+      value={{ severity, setSeverity, image, setImage }}
+    >
       {children}
     </SeverityWarningContext.Provider>
   )
 }
 
 export const SeverityWarningBanner = () => {
-  const { severity } = useSeverityWarning()
+  const { severity, image } = useSeverityWarning()
   const crit = extractCritValue(severity as string)
   const high = extractHigh(severity as string)
 
-  return crit && high ? (
+  return crit && high && image ? (
     <Alert
       icon={false}
       severity="warning"
@@ -48,7 +61,7 @@ export const SeverityWarningBanner = () => {
           <Button
             variant="text"
             component={Link}
-            href={REVIEW_RESULTS_URL}
+            href={resultsURL(image)}
             target="_blank"
             rel="noreferrer"
           >
