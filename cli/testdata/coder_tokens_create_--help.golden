@@ -1,8 +1,11 @@
-Usage: coder tokens create [flags]
+coder v0.0.0-devel
 
-Create a token
+USAGE:
+  coder tokens create [flags]
 
-[1mOptions[0m
+  Create a token
+
+OPTIONS:
       --lifetime duration, $CODER_TOKEN_LIFETIME (default: 720h0m0s)
           Specify a duration for the lifetime of the token.
 

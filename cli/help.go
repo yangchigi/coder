@@ -17,8 +17,10 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/xerrors"
 
+	"github.com/coder/coder/v2/buildinfo"
 	"github.com/coder/coder/v2/cli/clibase"
 	"github.com/coder/coder/v2/cli/cliui"
+	"github.com/coder/pretty"
 )
 
 //go:embed help.tpl
@@ -47,11 +49,20 @@ func wrapTTY(s string) string {
 var usageTemplate = template.Must(
 	template.New("usage").Funcs(
 		template.FuncMap{
+			"nameVersion": func() string {
+				txt := pretty.String("coder")
+				pretty.FgColor(cliui.Green).Format(txt)
+				txt.Append(" ", buildinfo.Version())
+				return txt.String()
+			},
 			"wrapTTY": func(s string) string {
 				return wrapTTY(s)
 			},
 			"trimNewline": func(s string) string {
 				return strings.TrimSuffix(s, "\n")
+			},
+			"keyword": func(s string) string {
+				return cliui.Keyword(s)
 			},
 			"typeHelper": func(opt *clibase.Option) string {
 				switch v := opt.Value.(type) {
@@ -71,13 +82,15 @@ var usageTemplate = template.Must(
 
 				body = wordwrap.WrapString(body, uint(twidth-len(spacing)))
 
+				sc := bufio.NewScanner(strings.NewReader(body))
+
 				var sb strings.Builder
-				for _, line := range strings.Split(body, "\n") {
+				for sc.Scan() {
 					// Remove existing indent, if any.
-					line = strings.TrimSpace(line)
+					// line = strings.TrimSpace(line)
 					// Use spaces so we can easily calculate wrapping.
 					_, _ = sb.WriteString(spacing)
-					_, _ = sb.WriteString(line)
+					_, _ = sb.Write(sc.Bytes())
 					_, _ = sb.WriteString("\n")
 				}
 				return sb.String()
@@ -127,7 +140,9 @@ var usageTemplate = template.Must(
 				return opt.Flag
 			},
 			"prettyHeader": func(s string) string {
-				return cliui.Bold(s)
+				return pretty.Sprint(
+					pretty.FgColor(cliui.Gold), strings.ToUpper(s), ":",
+				)
 			},
 			"isEnterprise": func(opt clibase.Option) bool {
 				return opt.Annotations.IsSet("enterprise")

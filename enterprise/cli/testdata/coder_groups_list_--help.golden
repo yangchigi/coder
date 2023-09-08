@@ -1,8 +1,11 @@
-Usage: coder groups list [flags]
+coder v0.0.0-devel
 
-List user groups
+USAGE:
+  coder groups list [flags]
 
-[1mOptions[0m
+  List user groups
+
+OPTIONS:
   -c, --column string-array (default: name,display name,organization id,members,avatar url)
           Columns to display in table output. Available columns: name, display
           name, organization id, members, avatar url.

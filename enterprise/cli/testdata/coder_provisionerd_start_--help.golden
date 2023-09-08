@@ -1,8 +1,11 @@
-Usage: coder provisionerd start [flags]
+coder v0.0.0-devel
 
-Run a provisioner daemon
+USAGE:
+  coder provisionerd start [flags]
 
-[1mOptions[0m
+  Run a provisioner daemon
+
+OPTIONS:
   -c, --cache-dir string, $CODER_CACHE_DIRECTORY (default: [cache dir])
           Directory to store cached data.
 
