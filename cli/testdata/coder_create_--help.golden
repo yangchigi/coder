@@ -1,12 +1,15 @@
-Usage: coder create [flags] [name]
+coder v0.0.0-devel
 
-Create a workspace
+USAGE:
+  coder create [flags] [name]
 
-- Create a workspace for another user (if you have permission):
+  Create a workspace
 
-     $ coder create <username>/<workspace_name>
+    - Create a workspace for another user (if you have permission):
+  
+       $ coder create <username>/<workspace_name>
 
-[1mOptions[0m
+OPTIONS:
       --parameter string-array, $CODER_RICH_PARAMETER
           Rich parameter value in the format "name=value".
 

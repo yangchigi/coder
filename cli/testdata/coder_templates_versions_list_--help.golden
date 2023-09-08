@@ -1,8 +1,11 @@
-Usage: coder templates versions list [flags] <template>
+coder v0.0.0-devel
 
-List all the versions of the specified template
+USAGE:
+  coder templates versions list [flags] <template>
 
-[1mOptions[0m
+  List all the versions of the specified template
+
+OPTIONS:
   -c, --column string-array (default: name,created at,created by,status,active)
           Columns to display in table output. Available columns: name, created
           at, created by, status, active.
