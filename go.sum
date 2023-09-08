@@ -226,6 +226,10 @@ github.com/coder/pretty v0.0.0-20230907185834-1d3e21235f75 h1:cTpm2TCHrJmijom7EU
 github.com/coder/pretty v0.0.0-20230907185834-1d3e21235f75/go.mod h1:5UuS2Ts+nTToAMeOjNlnHFkPahrtDkmpydBen/3wgZc=
 github.com/coder/pretty v0.0.0-20230907215737-666f1c793d10 h1:uWbKrpV/yhctyqu27BSPzW2tRNzzPh7Q68im5AFznqM=
 github.com/coder/pretty v0.0.0-20230907215737-666f1c793d10/go.mod h1:5UuS2Ts+nTToAMeOjNlnHFkPahrtDkmpydBen/3wgZc=
+github.com/coder/pretty v0.0.0-20230908204810-79b4e48d5122 h1:D5Gvu5a7Y0ox4Ai8QL4m1KGyhFvmEB6hyh3zKy8KuXE=
+github.com/coder/pretty v0.0.0-20230908204810-79b4e48d5122/go.mod h1:5UuS2Ts+nTToAMeOjNlnHFkPahrtDkmpydBen/3wgZc=
+github.com/coder/pretty v0.0.0-20230908205945-e89ba86370e0 h1:3A0ES21Ke+FxEM8CXx9n47SZOKOpgSE1bbJzlE4qPVs=
+github.com/coder/pretty v0.0.0-20230908205945-e89ba86370e0/go.mod h1:5UuS2Ts+nTToAMeOjNlnHFkPahrtDkmpydBen/3wgZc=
 github.com/coder/retry v1.4.0 h1:g0fojHFxcdgM3sBULqgjFDxw1UIvaCqk4ngUDu0EWag=
 github.com/coder/retry v1.4.0/go.mod h1:blHMk9vs6LkoRT9ZHyuZo360cufXEhrxqvEzeMtRGoY=
 github.com/coder/ssh v0.0.0-20230621095435-9a7e23486f1c h1:TI7TzdFI0UvQmwgyQhtI1HeyYNRxAQpr8Tw/rjT8VSA=
