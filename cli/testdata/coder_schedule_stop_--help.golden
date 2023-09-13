@@ -1,6 +1,6 @@
 coder v0.0.0-devel
 
-[93mUSAGE:[0m
+USAGE:
   coder schedule stop <workspace-name> { <duration> | manual }
 
   Edit workspace stop schedule
@@ -22,7 +22,7 @@ coder v0.0.0-devel
     * 2m   (2 minutes)
     * 2    (2 minutes)
   
-   $ coder schedule stop my-workspace 2h30m
+   [38;2;237;86;121m$ coder schedule stop my-workspace 2h30m[0m
 
 ———
 Run `coder --help` for a list of global options.
