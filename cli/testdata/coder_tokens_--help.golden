@@ -1,6 +1,6 @@
 coder v0.0.0-devel
 
-[93mUSAGE:[0m
+USAGE:
   coder tokens
 
   Manage personal access tokens
@@ -10,17 +10,17 @@ coder v0.0.0-devel
   Tokens are used to authenticate automated clients to Coder.
     - Create a token for automation:
   
-       $ coder tokens create
+       [38;2;237;86;121m$ coder tokens create[0m
   
     - List your tokens:
   
-       $ coder tokens ls
+       [38;2;237;86;121m$ coder tokens ls[0m
   
     - Remove a token by ID:
   
-       $ coder tokens rm WuoWs4ZsMX
+       [38;2;237;86;121m$ coder tokens rm WuoWs4ZsMX[0m
 
-[93mSUBCOMMANDS:[0m
+SUBCOMMANDS:
     create    Create a token
     list      List tokens
     remove    Delete a token

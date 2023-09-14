@@ -1,6 +1,6 @@
 coder v0.0.0-devel
 
-[93mUSAGE:[0m
+USAGE:
   coder templates
 
   Manage templates
@@ -11,18 +11,18 @@ coder v0.0.0-devel
   for workspaces
     - Create a template for developers to create workspaces:
   
-       $ coder templates create
+       [38;2;237;86;121m$ coder templates create[0m
   
     - Make changes to your template, and plan the changes:
   
-       $ coder templates plan my-template
+       [38;2;237;86;121m$ coder templates plan my-template[0m
   
     - Push an update to the template. Your developers can update their
   workspaces:
   
-       $ coder templates push my-template
+       [38;2;237;86;121m$ coder templates push my-template[0m
 
-[93mSUBCOMMANDS:[0m
+SUBCOMMANDS:
     create      Create a template from the current directory or as specified by
                 flag
     delete      Delete templates
