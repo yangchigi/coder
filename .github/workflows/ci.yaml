@@ -387,7 +387,7 @@ jobs:
 
   deploy:
     name: "deploy"
-    runs-on: ${{ github.repository_owner == 'coder' && 'buildjet-8vcpu-ubuntu-2204' || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'coder' && 'buildjet-16vcpu-ubuntu-2204' || 'ubuntu-latest' }}
     timeout-minutes: 30
     needs: changes
     if: |
@@ -510,7 +510,7 @@ jobs:
           flags: unittest-js
 
   test-e2e:
-    runs-on: ${{ github.repository_owner == 'coder' && 'buildjet-8vcpu-ubuntu-2204' || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'coder' && 'buildjet-16vcpu-ubuntu-2204' || 'ubuntu-latest' }}
     needs: changes
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.ts == 'true' || needs.changes.outputs.ci == 'true' || github.ref == 'refs/heads/main'
     timeout-minutes: 20
