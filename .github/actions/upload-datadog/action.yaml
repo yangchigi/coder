@@ -1,4 +1,4 @@
-name: Upload tests to Datadog
+name: Upload results to Datadog
 if: always()
 inputs:
   api-key:
@@ -18,9 +18,8 @@ runs:
     - name: Cache datadog-ci
       uses: buildjet/cache@v3
       with:
-        path: |
-          ${{ env.WORK_DIR }}
-        key: datadog-ci-${{ runner.os }}
+        path: ${{ env.WORK_DIR }}
+        key: datadog-ci-${{ runner.os }}-${{hashFiles('**/package-lock.json')}}}
         restore-keys: |
           datadog-ci-${{ runner.os }}-
           datadog-ci-
