@@ -10,7 +10,7 @@ runs:
     - name: Set work dir
       shell: bash
       run: |
-        WORK_DIR=${{ runner.temp }}/datadog-ci
+        WORK_DIR=~/datadog-ci
         mkdir -p $WORK_DIR
         echo "WORK_DIR=$WORK_DIR" >> $GITHUB_ENV
     # The npm install was taking 30s to 1m, accounting for 20+% of the total
