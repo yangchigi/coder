@@ -4563,6 +4563,12 @@ func (q *FakeQuerier) InsertWorkspaceAgent(_ context.Context, arg database.Inser
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
+	for _, agt := range q.workspaceAgents {
+		if agt.AuthToken == arg.AuthToken {
+			return database.WorkspaceAgent{}, errDuplicateKey
+		}
+	}
+
 	agent := database.WorkspaceAgent{
 		ID:                       arg.ID,
 		CreatedAt:                arg.CreatedAt,
