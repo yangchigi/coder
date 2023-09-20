@@ -1,0 +1,73 @@
+# The k8s tests our Kubernetes support by installing Coder via helm against
+# a broad range of Kubernetes distributions.
+#
+# In the future, we should run a subset (or maybe all) of our e2e test suite
+# against each of these clusters.
+name: k8s
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "helm/**"
+      - ".github/workflows/k8s.yaml"
+  workflow_dispatch:
+
+permissions:
+  actions: none
+  checks: none
+  contents: read
+  deployments: none
+  issues: none
+  packages: none
+  pull-requests: none
+  repository-projects: none
+  security-events: none
+  statuses: none
+
+# Cancel in-progress runs for pull requests when developers push
+# additional changes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  helm:
+    runs-on: buildjet-4vcpu-ubuntu-2204
+    strategy:
+      fail-fast: false
+      matrix:
+        # discovered via 'replicated cluster versions'
+        # I've manually selected the ones that our customers
+        # are most likely to use. `openshift` is interesting, but
+        # it takes 10m to deploy and we're waiting on a fix for it
+        # from Replicated.
+        dist:
+          - aks
+          - eks
+          - gke
+          # - openshift
+    env:
+        REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install replicated
+        run: |
+          curl -s https://api.github.com/repos/replicatedhq/replicated/releases/latest \
+              | grep "browser_download_url.*linux_amd64.tar.gz" \
+              | cut -d : -f 2,3 \
+              | tr -d \" \
+              | wget -O replicated.tar.gz -qi -
+              tar xf replicated.tar.gz replicated && rm replicated.tar.gz
+              mv replicated /usr/local/bin/replicated
+          replicated version
+
+      - name: Create cluster
+        run: |
+            OUTPUT=$(replicated cluster versions --output=json | jq -r '.[] | select(.short_name == "${{ matrix.dist }}") | "\(.instance_types[0]) \(.versions | max)"')
+
+            # Split the output into two variables
+            read -r INSTANCE_TYPE VERSION <<< "$OUTPUT"
