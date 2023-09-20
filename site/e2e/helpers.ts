@@ -569,7 +569,15 @@ export const createServer = async (
   port: number,
 ): Promise<ReturnType<typeof express>> => {
   const e = express();
-  await new Promise<void>((r) => e.listen(port, r));
+  const server = e.listen(port, (error) => {
+    if (error && error.code === 'EADDRINUSE') {
+      console.log(`Port ${port} is already in use. Trying a different port...`);
+    } else if (error) {
+      console.error('An error occurred:', error);
+    } else {
+      console.log(`Server is listening on port ${port}`);
+    }
+  });
   return e;
 };
 
