@@ -6,6 +6,13 @@ import { Language } from "../src/pages/CreateUserPage/CreateUserForm";
 test("create first user", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
+  const trialElement = await page.locator('[data-testid="trial"]').first();
+  console.log("trialElement", trialElement);
+  if (!trialElement) {
+    console.log("No trial element found. Assuming already created first user.");
+    return;
+  }
+
   await page.getByLabel(Language.usernameLabel).fill(constants.username);
   await page.getByLabel(Language.emailLabel).fill(constants.email);
   await page.getByLabel(Language.passwordLabel).fill(constants.password);
