@@ -20,15 +20,16 @@ import (
 
 	"cdr.dev/slog"
 	"cdr.dev/slog/sloggers/slogtest"
-	"github.com/coder/coder/agent"
-	"github.com/coder/coder/coderd/coderdtest"
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/codersdk"
-	"github.com/coder/coder/codersdk/agentsdk"
-	"github.com/coder/coder/provisioner/echo"
-	"github.com/coder/coder/provisionersdk/proto"
-	"github.com/coder/coder/tailnet/tailnettest"
-	"github.com/coder/coder/testutil"
+	"github.com/coder/coder/v2/agent/agenttest"
+	"github.com/coder/coder/v2/coderd/coderdtest"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/codersdk/agentsdk"
+	"github.com/coder/coder/v2/provisioner/echo"
+	"github.com/coder/coder/v2/provisionersdk/proto"
+	"github.com/coder/coder/v2/tailnet/tailnettest"
+	"github.com/coder/coder/v2/testutil"
 )
 
 func TestWorkspaceAgent(t *testing.T) {
@@ -43,10 +44,10 @@ func TestWorkspaceAgent(t *testing.T) {
 		tmpDir := t.TempDir()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:         echo.ParseComplete,
-			ProvisionPlan: echo.ProvisionComplete,
-			ProvisionApply: []*proto.Provision_Response{{
-				Type: &proto.Provision_Response_Complete{
-					Complete: &proto.Provision_Complete{
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
 						Resources: []*proto.Resource{{
 							Name: "example",
 							Type: "aws_instance",
@@ -87,10 +88,10 @@ func TestWorkspaceAgent(t *testing.T) {
 		tmpDir := t.TempDir()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:         echo.ParseComplete,
-			ProvisionPlan: echo.ProvisionComplete,
-			ProvisionApply: []*proto.Provision_Response{{
-				Type: &proto.Provision_Response_Complete{
-					Complete: &proto.Provision_Complete{
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
 						Resources: []*proto.Resource{{
 							Name: "example",
 							Type: "aws_instance",
@@ -132,10 +133,10 @@ func TestWorkspaceAgent(t *testing.T) {
 
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:         echo.ParseComplete,
-			ProvisionPlan: echo.ProvisionComplete,
-			ProvisionApply: []*proto.Provision_Response{{
-				Type: &proto.Provision_Response_Complete{
-					Complete: &proto.Provision_Complete{
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
 						Resources: []*proto.Resource{{
 							Name: "example",
 							Type: "aws_instance",
@@ -174,9 +175,100 @@ func TestWorkspaceAgent(t *testing.T) {
 		require.False(t, workspace.LatestBuild.Resources[0].Agents[0].Health.Healthy)
 		require.NotEmpty(t, workspace.LatestBuild.Resources[0].Agents[0].Health.Reason)
 	})
+
+	t.Run("DisplayApps", func(t *testing.T) {
+		t.Parallel()
+		client := coderdtest.New(t, &coderdtest.Options{
+			IncludeProvisionerDaemon: true,
+		})
+		user := coderdtest.CreateFirstUser(t, client)
+		authToken := uuid.NewString()
+		tmpDir := t.TempDir()
+		apps := &proto.DisplayApps{
+			Vscode:               true,
+			VscodeInsiders:       true,
+			WebTerminal:          true,
+			PortForwardingHelper: true,
+			SshHelper:            true,
+		}
+
+		echoResp := &echo.Responses{
+			Parse:         echo.ParseComplete,
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
+						Resources: []*proto.Resource{
+							{
+								Name: "example",
+								Type: "aws_instance",
+								Agents: []*proto.Agent{
+									{
+										Id:        uuid.NewString(),
+										Directory: tmpDir,
+										Auth: &proto.Agent_Token{
+											Token: authToken,
+										},
+										DisplayApps: apps,
+									},
+								},
+							},
+						},
+					},
+				},
+			}},
+		}
+
+		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, echoResp)
+		template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
+		coderdtest.AwaitTemplateVersionJob(t, client, version.ID)
+		workspace := coderdtest.CreateWorkspace(t, client, user.OrganizationID, template.ID)
+		coderdtest.AwaitWorkspaceBuildJob(t, client, workspace.LatestBuild.ID)
+
+		ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitLong)
+		defer cancel()
+
+		workspace, err := client.Workspace(ctx, workspace.ID)
+		require.NoError(t, err)
+		agent, err := client.WorkspaceAgent(ctx, workspace.LatestBuild.Resources[0].Agents[0].ID)
+		require.NoError(t, err)
+		expectedApps := []codersdk.DisplayApp{
+			codersdk.DisplayAppPortForward,
+			codersdk.DisplayAppSSH,
+			codersdk.DisplayAppVSCodeDesktop,
+			codersdk.DisplayAppVSCodeInsiders,
+			codersdk.DisplayAppWebTerminal,
+		}
+		require.ElementsMatch(t, expectedApps, agent.DisplayApps)
+
+		// Flips all the apps to false.
+		apps.PortForwardingHelper = false
+		apps.Vscode = false
+		apps.VscodeInsiders = false
+		apps.SshHelper = false
+		apps.WebTerminal = false
+
+		version = coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, echoResp,
+			func(req *codersdk.CreateTemplateVersionRequest) {
+				req.TemplateID = template.ID
+			})
+
+		err = client.UpdateActiveTemplateVersion(ctx, template.ID, codersdk.UpdateActiveTemplateVersion{
+			ID: version.ID,
+		})
+		require.NoError(t, err)
+		coderdtest.AwaitTemplateVersionJob(t, client, version.ID)
+		// Creating another workspace is just easier.
+		workspace = coderdtest.CreateWorkspace(t, client, user.OrganizationID, template.ID)
+		build := coderdtest.AwaitWorkspaceBuildJob(t, client, workspace.LatestBuild.ID)
+		require.NoError(t, err)
+		agent, err = client.WorkspaceAgent(ctx, build.Resources[0].Agents[0].ID)
+		require.NoError(t, err)
+		require.Len(t, agent.DisplayApps, 0)
+	})
 }
 
-func TestWorkspaceAgentStartupLogs(t *testing.T) {
+func TestWorkspaceAgentLogs(t *testing.T) {
 	t.Parallel()
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
@@ -188,10 +280,10 @@ func TestWorkspaceAgentStartupLogs(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:         echo.ParseComplete,
-			ProvisionPlan: echo.ProvisionComplete,
-			ProvisionApply: []*proto.Provision_Response{{
-				Type: &proto.Provision_Response_Complete{
-					Complete: &proto.Provision_Complete{
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
 						Resources: []*proto.Resource{{
 							Name: "example",
 							Type: "aws_instance",
@@ -216,11 +308,11 @@ func TestWorkspaceAgentStartupLogs(t *testing.T) {
 		err := agentClient.PatchLogs(ctx, agentsdk.PatchLogs{
 			Logs: []agentsdk.Log{
 				{
-					CreatedAt: database.Now(),
+					CreatedAt: dbtime.Now(),
 					Output:    "testing",
 				},
 				{
-					CreatedAt: database.Now(),
+					CreatedAt: dbtime.Now(),
 					Output:    "testing2",
 				},
 			},
@@ -242,6 +334,71 @@ func TestWorkspaceAgentStartupLogs(t *testing.T) {
 		require.Equal(t, "testing", logChunk[0].Output)
 		require.Equal(t, "testing2", logChunk[1].Output)
 	})
+	t.Run("Close logs on outdated build", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitMedium)
+		client := coderdtest.New(t, &coderdtest.Options{
+			IncludeProvisionerDaemon: true,
+		})
+		user := coderdtest.CreateFirstUser(t, client)
+		authToken := uuid.NewString()
+		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
+			Parse:         echo.ParseComplete,
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
+						Resources: []*proto.Resource{{
+							Name: "example",
+							Type: "aws_instance",
+							Agents: []*proto.Agent{{
+								Id: uuid.NewString(),
+								Auth: &proto.Agent_Token{
+									Token: authToken,
+								},
+							}},
+						}},
+					},
+				},
+			}},
+		})
+		template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
+		coderdtest.AwaitTemplateVersionJob(t, client, version.ID)
+		workspace := coderdtest.CreateWorkspace(t, client, user.OrganizationID, template.ID)
+		build := coderdtest.AwaitWorkspaceBuildJob(t, client, workspace.LatestBuild.ID)
+
+		agentClient := agentsdk.New(client.URL)
+		agentClient.SetSessionToken(authToken)
+		err := agentClient.PatchLogs(ctx, agentsdk.PatchLogs{
+			Logs: []agentsdk.Log{
+				{
+					CreatedAt: dbtime.Now(),
+					Output:    "testing",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		logs, closer, err := client.WorkspaceAgentLogsAfter(ctx, build.Resources[0].Agents[0].ID, 0, true)
+		require.NoError(t, err)
+		defer func() {
+			_ = closer.Close()
+		}()
+
+		select {
+		case <-ctx.Done():
+			require.FailNow(t, "context done while waiting for first log")
+		case <-logs:
+		}
+
+		_ = coderdtest.CreateWorkspaceBuild(t, client, workspace, database.WorkspaceTransitionStart)
+
+		select {
+		case <-ctx.Done():
+			require.FailNow(t, "context done while waiting for logs close")
+		case <-logs:
+		}
+	})
 	t.Run("PublishesOnOverflow", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitMedium)
@@ -252,10 +409,10 @@ func TestWorkspaceAgentStartupLogs(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:         echo.ParseComplete,
-			ProvisionPlan: echo.ProvisionComplete,
-			ProvisionApply: []*proto.Provision_Response{{
-				Type: &proto.Provision_Response_Complete{
-					Complete: &proto.Provision_Complete{
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
 						Resources: []*proto.Resource{{
 							Name: "example",
 							Type: "aws_instance",
@@ -282,7 +439,7 @@ func TestWorkspaceAgentStartupLogs(t *testing.T) {
 		agentClient.SetSessionToken(authToken)
 		err = agentClient.PatchLogs(ctx, agentsdk.PatchLogs{
 			Logs: []agentsdk.Log{{
-				CreatedAt: database.Now(),
+				CreatedAt: dbtime.Now(),
 				Output:    strings.Repeat("a", (1<<20)+1),
 			}},
 		})
@@ -319,7 +476,7 @@ func TestWorkspaceAgentListen(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:          echo.ParseComplete,
-			ProvisionPlan:  echo.ProvisionComplete,
+			ProvisionPlan:  echo.PlanComplete,
 			ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 		})
 		template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
@@ -327,20 +484,12 @@ func TestWorkspaceAgentListen(t *testing.T) {
 		workspace := coderdtest.CreateWorkspace(t, client, user.OrganizationID, template.ID)
 		coderdtest.AwaitWorkspaceBuildJob(t, client, workspace.LatestBuild.ID)
 
-		agentClient := agentsdk.New(client.URL)
-		agentClient.SetSessionToken(authToken)
-		agentCloser := agent.New(agent.Options{
-			Client: agentClient,
-			Logger: slogtest.Make(t, nil).Named("agent").Leveled(slog.LevelDebug),
-		})
-		defer func() {
-			_ = agentCloser.Close()
-		}()
+		_ = agenttest.New(t, client.URL, authToken)
+		resources := coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
 
 		ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitLong)
 		defer cancel()
 
-		resources := coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
 		conn, err := client.DialWorkspaceAgent(ctx, resources[0].Agents[0].ID, nil)
 		require.NoError(t, err)
 		defer func() {
@@ -360,7 +509,7 @@ func TestWorkspaceAgentListen(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:          echo.ParseComplete,
-			ProvisionPlan:  echo.ProvisionComplete,
+			ProvisionPlan:  echo.PlanComplete,
 			ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 		})
 
@@ -371,10 +520,10 @@ func TestWorkspaceAgentListen(t *testing.T) {
 
 		version = coderdtest.UpdateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:         echo.ParseComplete,
-			ProvisionPlan: echo.ProvisionComplete,
-			ProvisionApply: []*proto.Provision_Response{{
-				Type: &proto.Provision_Response_Complete{
-					Complete: &proto.Provision_Complete{
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
 						Resources: []*proto.Resource{{
 							Name: "example",
 							Type: "aws_instance",
@@ -406,7 +555,9 @@ func TestWorkspaceAgentListen(t *testing.T) {
 
 		_, err = agentClient.Listen(ctx)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "build is outdated")
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusForbidden, sdkErr.StatusCode())
 	})
 }
 
@@ -417,7 +568,7 @@ func TestWorkspaceAgentTailnet(t *testing.T) {
 	authToken := uuid.NewString()
 	version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 		Parse:          echo.ParseComplete,
-		ProvisionPlan:  echo.ProvisionComplete,
+		ProvisionPlan:  echo.PlanComplete,
 		ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 	})
 	template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
@@ -426,13 +577,7 @@ func TestWorkspaceAgentTailnet(t *testing.T) {
 	coderdtest.AwaitWorkspaceBuildJob(t, client, workspace.LatestBuild.ID)
 	daemonCloser.Close()
 
-	agentClient := agentsdk.New(client.URL)
-	agentClient.SetSessionToken(authToken)
-	agentCloser := agent.New(agent.Options{
-		Client: agentClient,
-		Logger: slogtest.Make(t, nil).Named("agent").Leveled(slog.LevelDebug),
-	})
-	defer agentCloser.Close()
+	_ = agenttest.New(t, client.URL, authToken)
 	resources := coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -469,7 +614,7 @@ func TestWorkspaceAgentTailnetDirectDisabled(t *testing.T) {
 	authToken := uuid.NewString()
 	version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 		Parse:          echo.ParseComplete,
-		ProvisionPlan:  echo.ProvisionComplete,
+		ProvisionPlan:  echo.PlanComplete,
 		ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 	})
 	template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
@@ -487,11 +632,7 @@ func TestWorkspaceAgentTailnetDirectDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, manifest.DisableDirectConnections)
 
-	agentCloser := agent.New(agent.Options{
-		Client: agentClient,
-		Logger: slogtest.Make(t, nil).Named("agent").Leveled(slog.LevelDebug),
-	})
-	defer agentCloser.Close()
+	_ = agenttest.New(t, client.URL, authToken)
 	resources := coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
 	agentID := resources[0].Agents[0].ID
 
@@ -546,10 +687,10 @@ func TestWorkspaceAgentListeningPorts(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:         echo.ParseComplete,
-			ProvisionPlan: echo.ProvisionComplete,
-			ProvisionApply: []*proto.Provision_Response{{
-				Type: &proto.Provision_Response_Complete{
-					Complete: &proto.Provision_Complete{
+			ProvisionPlan: echo.PlanComplete,
+			ProvisionApply: []*proto.Response{{
+				Type: &proto.Response_Apply{
+					Apply: &proto.ApplyComplete{
 						Resources: []*proto.Resource{{
 							Name: "example",
 							Type: "aws_instance",
@@ -570,17 +711,8 @@ func TestWorkspaceAgentListeningPorts(t *testing.T) {
 		workspace := coderdtest.CreateWorkspace(t, client, user.OrganizationID, template.ID)
 		coderdtest.AwaitWorkspaceBuildJob(t, client, workspace.LatestBuild.ID)
 
-		agentClient := agentsdk.New(client.URL)
-		agentClient.SetSessionToken(authToken)
-		agentCloser := agent.New(agent.Options{
-			Client: agentClient,
-			Logger: slogtest.Make(t, nil).Named("agent").Leveled(slog.LevelDebug),
-		})
-		t.Cleanup(func() {
-			_ = agentCloser.Close()
-		})
+		_ = agenttest.New(t, client.URL, authToken)
 		resources := coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
-
 		return client, uint16(coderdPort), resources[0].Agents[0].ID
 	}
 
@@ -804,9 +936,9 @@ func TestWorkspaceAgentAppHealth(t *testing.T) {
 	}
 	version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 		Parse: echo.ParseComplete,
-		ProvisionApply: []*proto.Provision_Response{{
-			Type: &proto.Provision_Response_Complete{
-				Complete: &proto.Provision_Complete{
+		ProvisionApply: []*proto.Response{{
+			Type: &proto.Response_Apply{
+				Apply: &proto.ApplyComplete{
 					Resources: []*proto.Resource{{
 						Name: "example",
 						Type: "aws_instance",
@@ -891,7 +1023,7 @@ func TestWorkspaceAgentReportStats(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:          echo.ParseComplete,
-			ProvisionPlan:  echo.ProvisionComplete,
+			ProvisionPlan:  echo.PlanComplete,
 			ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 		})
 		template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
@@ -940,7 +1072,7 @@ func TestWorkspaceAgent_LifecycleState(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:          echo.ParseComplete,
-			ProvisionPlan:  echo.ProvisionComplete,
+			ProvisionPlan:  echo.PlanComplete,
 			ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 		})
 		template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
@@ -1012,10 +1144,10 @@ func TestWorkspaceAgent_Metadata(t *testing.T) {
 	authToken := uuid.NewString()
 	version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 		Parse:         echo.ParseComplete,
-		ProvisionPlan: echo.ProvisionComplete,
-		ProvisionApply: []*proto.Provision_Response{{
-			Type: &proto.Provision_Response_Complete{
-				Complete: &proto.Provision_Complete{
+		ProvisionPlan: echo.PlanComplete,
+		ProvisionApply: []*proto.Response{{
+			Type: &proto.Response_Apply{
+				Apply: &proto.ApplyComplete{
 					Resources: []*proto.Resource{{
 						Name: "example",
 						Type: "aws_instance",
@@ -1151,7 +1283,7 @@ func TestWorkspaceAgent_Metadata(t *testing.T) {
 	require.Len(t, update, 3)
 	check(wantMetadata1, update[0], true)
 
-	const maxValueLen = 32 << 10
+	const maxValueLen = 2048
 	tooLongValueMetadata := wantMetadata1
 	tooLongValueMetadata.Value = strings.Repeat("a", maxValueLen*2)
 	tooLongValueMetadata.Error = ""
@@ -1182,7 +1314,7 @@ func TestWorkspaceAgent_Startup(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:          echo.ParseComplete,
-			ProvisionPlan:  echo.ProvisionComplete,
+			ProvisionPlan:  echo.PlanComplete,
 			ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 		})
 		template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
@@ -1195,16 +1327,23 @@ func TestWorkspaceAgent_Startup(t *testing.T) {
 
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
-		const (
-			expectedVersion   = "v1.2.3"
-			expectedDir       = "/home/coder"
-			expectedSubsystem = codersdk.AgentSubsystemEnvbox
+		var (
+			expectedVersion    = "v1.2.3"
+			expectedDir        = "/home/coder"
+			expectedSubsystems = []codersdk.AgentSubsystem{
+				codersdk.AgentSubsystemEnvbox,
+				codersdk.AgentSubsystemExectrace,
+			}
 		)
 
 		err := agentClient.PostStartup(ctx, agentsdk.PostStartupRequest{
 			Version:           expectedVersion,
 			ExpandedDirectory: expectedDir,
-			Subsystem:         expectedSubsystem,
+			Subsystems: []codersdk.AgentSubsystem{
+				// Not sorted.
+				expectedSubsystems[1],
+				expectedSubsystems[0],
+			},
 		})
 		require.NoError(t, err)
 
@@ -1215,7 +1354,8 @@ func TestWorkspaceAgent_Startup(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expectedVersion, wsagent.Version)
 		require.Equal(t, expectedDir, wsagent.ExpandedDirectory)
-		require.Equal(t, expectedSubsystem, wsagent.Subsystem)
+		// Sorted
+		require.Equal(t, expectedSubsystems, wsagent.Subsystems)
 	})
 
 	t.Run("InvalidSemver", func(t *testing.T) {
@@ -1228,7 +1368,7 @@ func TestWorkspaceAgent_Startup(t *testing.T) {
 		authToken := uuid.NewString()
 		version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 			Parse:          echo.ParseComplete,
-			ProvisionPlan:  echo.ProvisionComplete,
+			ProvisionPlan:  echo.PlanComplete,
 			ProvisionApply: echo.ProvisionApplyWithAgent(authToken),
 		})
 		template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
@@ -1283,22 +1423,15 @@ func TestWorkspaceAgent_UpdatedDERP(t *testing.T) {
 	agentToken := uuid.NewString()
 	version := coderdtest.CreateTemplateVersion(t, client, user.OrganizationID, &echo.Responses{
 		Parse:          echo.ParseComplete,
-		ProvisionPlan:  echo.ProvisionComplete,
+		ProvisionPlan:  echo.PlanComplete,
 		ProvisionApply: echo.ProvisionApplyWithAgent(agentToken),
 	})
 	template := coderdtest.CreateTemplate(t, client, user.OrganizationID, version.ID)
 	coderdtest.AwaitTemplateVersionJob(t, client, version.ID)
 	workspace := coderdtest.CreateWorkspace(t, client, user.OrganizationID, template.ID)
 	coderdtest.AwaitWorkspaceBuildJob(t, client, workspace.LatestBuild.ID)
-	agentClient := agentsdk.New(client.URL)
-	agentClient.SetSessionToken(agentToken)
-	agentCloser := agent.New(agent.Options{
-		Client: agentClient,
-		Logger: logger.Named("agent"),
-	})
-	defer func() {
-		_ = agentCloser.Close()
-	}()
+
+	agentCloser := agenttest.New(t, client.URL, agentToken)
 	resources := coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
 	agentID := resources[0].Agents[0].ID
 

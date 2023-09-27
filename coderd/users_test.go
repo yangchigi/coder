@@ -4,24 +4,30 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/coder/coder/v2/coderd"
+	"github.com/coder/coder/v2/coderd/coderdtest/oidctest"
+
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/coder/coder/cli/clibase"
-	"github.com/coder/coder/coderd/audit"
-	"github.com/coder/coder/coderd/coderdtest"
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/coderd/database/dbauthz"
-	"github.com/coder/coder/coderd/rbac"
-	"github.com/coder/coder/codersdk"
-	"github.com/coder/coder/testutil"
+	"github.com/coder/coder/v2/cli/clibase"
+	"github.com/coder/coder/v2/coderd/audit"
+	"github.com/coder/coder/v2/coderd/coderdtest"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbauthz"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/coderd/rbac"
+	"github.com/coder/coder/v2/coderd/util/slice"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/testutil"
 )
 
 func TestFirstUser(t *testing.T) {
@@ -401,6 +407,7 @@ func TestPostLogout(t *testing.T) {
 	})
 }
 
+// nolint:bodyclose
 func TestPostUsers(t *testing.T) {
 	t.Parallel()
 	t.Run("NoAuth", func(t *testing.T) {
@@ -559,11 +566,70 @@ func TestPostUsers(t *testing.T) {
 		// should be Never since they haven't performed a request.
 		for _, user := range allUsersRes.Users {
 			if user.ID == firstUser.ID {
-				require.WithinDuration(t, firstUser.LastSeenAt, database.Now(), testutil.WaitShort)
+				require.WithinDuration(t, firstUser.LastSeenAt, dbtime.Now(), testutil.WaitShort)
 			} else {
 				require.Zero(t, user.LastSeenAt)
 			}
 		}
+	})
+
+	t.Run("CreateNoneLoginType", func(t *testing.T) {
+		t.Parallel()
+		client := coderdtest.New(t, nil)
+		first := coderdtest.CreateFirstUser(t, client)
+
+		ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitLong)
+		defer cancel()
+
+		user, err := client.CreateUser(ctx, codersdk.CreateUserRequest{
+			OrganizationID: first.OrganizationID,
+			Email:          "another@user.org",
+			Username:       "someone-else",
+			Password:       "",
+			UserLoginType:  codersdk.LoginTypeNone,
+		})
+		require.NoError(t, err)
+
+		found, err := client.User(ctx, user.ID.String())
+		require.NoError(t, err)
+		require.Equal(t, found.LoginType, codersdk.LoginTypeNone)
+	})
+
+	t.Run("CreateOIDCLoginType", func(t *testing.T) {
+		t.Parallel()
+		email := "another@user.org"
+		fake := oidctest.NewFakeIDP(t,
+			oidctest.WithServing(),
+		)
+		cfg := fake.OIDCConfig(t, nil, func(cfg *coderd.OIDCConfig) {
+			cfg.AllowSignups = true
+		})
+
+		client := coderdtest.New(t, &coderdtest.Options{
+			OIDCConfig: cfg,
+		})
+		first := coderdtest.CreateFirstUser(t, client)
+
+		ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitLong)
+		defer cancel()
+
+		_, err := client.CreateUser(ctx, codersdk.CreateUserRequest{
+			OrganizationID: first.OrganizationID,
+			Email:          email,
+			Username:       "someone-else",
+			Password:       "",
+			UserLoginType:  codersdk.LoginTypeOIDC,
+		})
+		require.NoError(t, err)
+
+		// Try to log in with OIDC.
+		userClient, _ := fake.Login(t, client, jwt.MapClaims{
+			"email": email,
+		})
+
+		found, err := userClient.User(ctx, "me")
+		require.NoError(t, err)
+		require.Equal(t, found.LoginType, codersdk.LoginTypeOIDC)
 	})
 }
 
@@ -1804,8 +1870,8 @@ func assertPagination(ctx context.Context, t *testing.T, client *codersdk.Client
 
 // sortUsers sorts by (created_at, id)
 func sortUsers(users []codersdk.User) {
-	sort.Slice(users, func(i, j int) bool {
-		return strings.ToLower(users[i].Username) < strings.ToLower(users[j].Username)
+	slices.SortFunc(users, func(a, b codersdk.User) int {
+		return slice.Ascending(strings.ToLower(a.Username), strings.ToLower(b.Username))
 	})
 }
 

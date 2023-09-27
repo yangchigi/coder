@@ -14,21 +14,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"cdr.dev/slog"
-	"cdr.dev/slog/sloggers/slogtest"
-	"github.com/coder/coder/agent"
-	"github.com/coder/coder/buildinfo"
-	"github.com/coder/coder/coderd/coderdtest"
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/coderd/database/dbtestutil"
-	"github.com/coder/coder/coderd/workspaceapps"
-	"github.com/coder/coder/codersdk"
-	"github.com/coder/coder/codersdk/agentsdk"
-	"github.com/coder/coder/enterprise/coderd/coderdenttest"
-	"github.com/coder/coder/enterprise/coderd/license"
-	"github.com/coder/coder/enterprise/wsproxy/wsproxysdk"
-	"github.com/coder/coder/provisioner/echo"
-	"github.com/coder/coder/testutil"
+	"github.com/coder/coder/v2/agent/agenttest"
+	"github.com/coder/coder/v2/buildinfo"
+	"github.com/coder/coder/v2/coderd/coderdtest"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbtestutil"
+	"github.com/coder/coder/v2/coderd/workspaceapps"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/enterprise/coderd/coderdenttest"
+	"github.com/coder/coder/v2/enterprise/coderd/license"
+	"github.com/coder/coder/v2/enterprise/wsproxy/wsproxysdk"
+	"github.com/coder/coder/v2/provisioner/echo"
+	"github.com/coder/coder/v2/testutil"
 )
 
 func TestRegions(t *testing.T) {
@@ -677,17 +674,8 @@ func TestIssueSignedAppToken(t *testing.T) {
 	workspace.LatestBuild = build
 
 	// Connect an agent to the workspace
-	agentClient := agentsdk.New(client.URL)
-	agentClient.SetSessionToken(authToken)
-	agentCloser := agent.New(agent.Options{
-		Client: agentClient,
-		Logger: slogtest.Make(t, nil).Named("agent").Leveled(slog.LevelDebug),
-	})
-	t.Cleanup(func() {
-		_ = agentCloser.Close()
-	})
-
-	coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
+	_ = agenttest.New(t, client.URL, authToken)
+	_ = coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
 
 	createProxyCtx := testutil.Context(t, testutil.WaitLong)
 	proxyRes, err := client.CreateWorkspaceProxy(createProxyCtx, codersdk.CreateWorkspaceProxyRequest{
@@ -787,16 +775,8 @@ func TestReconnectingPTYSignedToken(t *testing.T) {
 
 	// Connect an agent to the workspace
 	agentID := build.Resources[0].Agents[0].ID
-	agentClient := agentsdk.New(client.URL)
-	agentClient.SetSessionToken(authToken)
-	agentCloser := agent.New(agent.Options{
-		Client: agentClient,
-		Logger: slogtest.Make(t, nil).Named("agent").Leveled(slog.LevelDebug),
-	})
-	t.Cleanup(func() {
-		_ = agentCloser.Close()
-	})
-	coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
+	_ = agenttest.New(t, client.URL, authToken)
+	_ = coderdtest.AwaitWorkspaceAgents(t, client, workspace.ID)
 
 	proxyURL, err := url.Parse(fmt.Sprintf("https://%s.com", namesgenerator.GetRandomName(1)))
 	require.NoError(t, err)

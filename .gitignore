@@ -61,3 +61,12 @@ site/stats/
 ./scaletest/terraform/.terraform.lock.hcl
 scaletest/terraform/secrets.tfvars
 .terraform.tfstate.*
+
+# Nix
+result
+
+# Data dumps from unit tests
+**/*.test.sql
+
+# Filebrowser.db
+**/filebrowser.db

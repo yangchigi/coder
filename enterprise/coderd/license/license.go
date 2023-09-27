@@ -12,9 +12,9 @@ import (
 
 	"cdr.dev/slog"
 
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/coderd/database/dbauthz"
-	"github.com/coder/coder/codersdk"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbauthz"
+	"github.com/coder/coder/v2/codersdk"
 )
 
 // Entitlements processes licenses to return whether features are enabled or not.
@@ -61,6 +61,7 @@ func Entitlements(
 	}
 
 	allFeatures := false
+	allFeaturesEntitlement := codersdk.EntitlementNotEntitled
 
 	// Here we loop through licenses to detect enabled features.
 	for _, l := range licenses {
@@ -117,7 +118,7 @@ func Entitlements(
 				}
 			default:
 				entitlements.Features[featureName] = codersdk.Feature{
-					Entitlement: entitlement,
+					Entitlement: maxEntitlement(entitlements.Features[featureName].Entitlement, entitlement),
 					Enabled:     enablements[featureName] || featureName.AlwaysEnable(),
 				}
 			}
@@ -125,6 +126,7 @@ func Entitlements(
 
 		if claims.AllFeatures {
 			allFeatures = true
+			allFeaturesEntitlement = maxEntitlement(allFeaturesEntitlement, entitlement)
 		}
 		entitlements.RequireTelemetry = entitlements.RequireTelemetry || claims.RequireTelemetry
 	}
@@ -136,7 +138,8 @@ func Entitlements(
 				continue
 			}
 			feature := entitlements.Features[featureName]
-			feature.Entitlement = codersdk.EntitlementEntitled
+			feature.Entitlement = maxEntitlement(feature.Entitlement, allFeaturesEntitlement)
+			feature.Enabled = enablements[featureName] || featureName.AlwaysEnable()
 			entitlements.Features[featureName] = feature
 		}
 	}
@@ -225,6 +228,7 @@ func Entitlements(
 			entitlements.Features[featureName] = feature
 		}
 	}
+	entitlements.RefreshedAt = now
 
 	return entitlements, nil
 }
@@ -322,4 +326,15 @@ func keyFunc(keys map[string]ed25519.PublicKey) func(*jwt.Token) (interface{}, e
 		}
 		return k, nil
 	}
+}
+
+// maxEntitlement is the "greater" entitlement between the given values
+func maxEntitlement(e1, e2 codersdk.Entitlement) codersdk.Entitlement {
+	if e1 == codersdk.EntitlementEntitled || e2 == codersdk.EntitlementEntitled {
+		return codersdk.EntitlementEntitled
+	}
+	if e1 == codersdk.EntitlementGracePeriod || e2 == codersdk.EntitlementGracePeriod {
+		return codersdk.EntitlementGracePeriod
+	}
+	return codersdk.EntitlementNotEntitled
 }

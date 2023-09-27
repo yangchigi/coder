@@ -8,15 +8,18 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/xerrors"
 
 	"github.com/google/go-github/v43/github"
 
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/coderd/httpapi"
-	"github.com/coder/coder/codersdk"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/coderd/httpapi"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/retry"
 )
 
 type OAuth2Config interface {
@@ -57,17 +60,30 @@ type Config struct {
 }
 
 // RefreshToken automatically refreshes the token if expired and permitted.
-// It returns the token and a bool indicating if the token was refreshed.
+// It returns the token and a bool indicating if the token is valid.
 func (c *Config) RefreshToken(ctx context.Context, db database.Store, gitAuthLink database.GitAuthLink) (database.GitAuthLink, bool, error) {
 	// If the token is expired and refresh is disabled, we prompt
 	// the user to authenticate again.
-	if c.NoRefresh && gitAuthLink.OAuthExpiry.Before(database.Now()) {
+	if c.NoRefresh &&
+		// If the time is set to 0, then it should never expire.
+		// This is true for github, which has no expiry.
+		!gitAuthLink.OAuthExpiry.IsZero() &&
+		gitAuthLink.OAuthExpiry.Before(dbtime.Now()) {
 		return gitAuthLink, false, nil
+	}
+
+	// This is additional defensive programming. Because TokenSource is an interface,
+	// we cannot be sure that the implementation will treat an 'IsZero' time
+	// as "not-expired". The default implementation does, but a custom implementation
+	// might not. Removing the refreshToken will guarantee a refresh will fail.
+	refreshToken := gitAuthLink.OAuthRefreshToken
+	if c.NoRefresh {
+		refreshToken = ""
 	}
 
 	token, err := c.TokenSource(ctx, &oauth2.Token{
 		AccessToken:  gitAuthLink.OAuthAccessToken,
-		RefreshToken: gitAuthLink.OAuthRefreshToken,
+		RefreshToken: refreshToken,
 		Expiry:       gitAuthLink.OAuthExpiry,
 	}).Token()
 	if err != nil {
@@ -75,12 +91,26 @@ func (c *Config) RefreshToken(ctx context.Context, db database.Store, gitAuthLin
 		// we aren't trying to surface an error, we're just trying to obtain a valid token.
 		return gitAuthLink, false, nil
 	}
-
+	r := retry.New(50*time.Millisecond, 200*time.Millisecond)
+	// See the comment below why the retry and cancel is required.
+	retryCtx, retryCtxCancel := context.WithTimeout(ctx, time.Second)
+	defer retryCtxCancel()
+validate:
 	valid, _, err := c.ValidateToken(ctx, token.AccessToken)
 	if err != nil {
 		return gitAuthLink, false, xerrors.Errorf("validate git auth token: %w", err)
 	}
 	if !valid {
+		// A customer using GitHub in Australia reported that validating immediately
+		// after refreshing the token would intermittently fail with a 401. Waiting
+		// a few milliseconds with the exact same token on the exact same request
+		// would resolve the issue. It seems likely that the write is not propagating
+		// to the read replica in time.
+		//
+		// We do an exponential backoff here to give the write time to propagate.
+		if c.Type == codersdk.GitProviderGitHub && r.Wait(retryCtx) {
+			goto validate
+		}
 		// The token is no longer valid!
 		return gitAuthLink, false, nil
 	}
@@ -90,7 +120,7 @@ func (c *Config) RefreshToken(ctx context.Context, db database.Store, gitAuthLin
 		gitAuthLink, err = db.UpdateGitAuthLink(ctx, database.UpdateGitAuthLinkParams{
 			ProviderID:        c.ID,
 			UserID:            gitAuthLink.UserID,
-			UpdatedAt:         database.Now(),
+			UpdatedAt:         dbtime.Now(),
 			OAuthAccessToken:  token.AccessToken,
 			OAuthRefreshToken: token.RefreshToken,
 			OAuthExpiry:       token.Expiry,
@@ -113,8 +143,13 @@ func (c *Config) ValidateToken(ctx context.Context, token string) (bool, *coders
 	if err != nil {
 		return false, nil, err
 	}
+
+	cli := http.DefaultClient
+	if v, ok := ctx.Value(oauth2.HTTPClient).(*http.Client); ok {
+		cli = v
+	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	res, err := http.DefaultClient.Do(req)
+	res, err := cli.Do(req)
 	if err != nil {
 		return false, nil, err
 	}

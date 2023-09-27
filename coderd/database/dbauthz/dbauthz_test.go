@@ -13,13 +13,14 @@ import (
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
-	"github.com/coder/coder/coderd/coderdtest"
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/coderd/database/dbauthz"
-	"github.com/coder/coder/coderd/database/dbfake"
-	"github.com/coder/coder/coderd/database/dbgen"
-	"github.com/coder/coder/coderd/rbac"
-	"github.com/coder/coder/coderd/util/slice"
+	"github.com/coder/coder/v2/coderd/coderdtest"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbauthz"
+	"github.com/coder/coder/v2/coderd/database/dbfake"
+	"github.com/coder/coder/v2/coderd/database/dbgen"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/coderd/rbac"
+	"github.com/coder/coder/v2/coderd/util/slice"
 )
 
 func TestAsNoActor(t *testing.T) {
@@ -343,14 +344,14 @@ func (s *MethodTestSuite) TestGroup() {
 func (s *MethodTestSuite) TestProvsionerJob() {
 	s.Run("Build/GetProvisionerJobByID", s.Subtest(func(db database.Store, check *expects) {
 		w := dbgen.Workspace(s.T(), db, database.Workspace{})
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeWorkspaceBuild,
 		})
 		_ = dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{JobID: j.ID, WorkspaceID: w.ID})
 		check.Args(j.ID).Asserts(w, rbac.ActionRead).Returns(j)
 	}))
 	s.Run("TemplateVersion/GetProvisionerJobByID", s.Subtest(func(db database.Store, check *expects) {
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeTemplateVersionImport,
 		})
 		tpl := dbgen.Template(s.T(), db, database.Template{})
@@ -365,7 +366,7 @@ func (s *MethodTestSuite) TestProvsionerJob() {
 		v := dbgen.TemplateVersion(s.T(), db, database.TemplateVersion{
 			TemplateID: uuid.NullUUID{UUID: tpl.ID, Valid: true},
 		})
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeTemplateVersionDryRun,
 			Input: must(json.Marshal(struct {
 				TemplateVersionID uuid.UUID `json:"template_version_id"`
@@ -376,7 +377,7 @@ func (s *MethodTestSuite) TestProvsionerJob() {
 	s.Run("Build/UpdateProvisionerJobWithCancelByID", s.Subtest(func(db database.Store, check *expects) {
 		tpl := dbgen.Template(s.T(), db, database.Template{AllowUserCancelWorkspaceJobs: true})
 		w := dbgen.Workspace(s.T(), db, database.Workspace{TemplateID: tpl.ID})
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeWorkspaceBuild,
 		})
 		_ = dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{JobID: j.ID, WorkspaceID: w.ID})
@@ -385,14 +386,14 @@ func (s *MethodTestSuite) TestProvsionerJob() {
 	s.Run("BuildFalseCancel/UpdateProvisionerJobWithCancelByID", s.Subtest(func(db database.Store, check *expects) {
 		tpl := dbgen.Template(s.T(), db, database.Template{AllowUserCancelWorkspaceJobs: false})
 		w := dbgen.Workspace(s.T(), db, database.Workspace{TemplateID: tpl.ID})
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeWorkspaceBuild,
 		})
 		_ = dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{JobID: j.ID, WorkspaceID: w.ID})
 		check.Args(database.UpdateProvisionerJobWithCancelByIDParams{ID: j.ID}).Asserts(w, rbac.ActionUpdate).Returns()
 	}))
 	s.Run("TemplateVersion/UpdateProvisionerJobWithCancelByID", s.Subtest(func(db database.Store, check *expects) {
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeTemplateVersionImport,
 		})
 		tpl := dbgen.Template(s.T(), db, database.Template{})
@@ -404,7 +405,7 @@ func (s *MethodTestSuite) TestProvsionerJob() {
 			Asserts(v.RBACObject(tpl), []rbac.Action{rbac.ActionRead, rbac.ActionUpdate}).Returns()
 	}))
 	s.Run("TemplateVersionNoTemplate/UpdateProvisionerJobWithCancelByID", s.Subtest(func(db database.Store, check *expects) {
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeTemplateVersionImport,
 		})
 		v := dbgen.TemplateVersion(s.T(), db, database.TemplateVersion{
@@ -419,7 +420,7 @@ func (s *MethodTestSuite) TestProvsionerJob() {
 		v := dbgen.TemplateVersion(s.T(), db, database.TemplateVersion{
 			TemplateID: uuid.NullUUID{UUID: tpl.ID, Valid: true},
 		})
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeTemplateVersionDryRun,
 			Input: must(json.Marshal(struct {
 				TemplateVersionID uuid.UUID `json:"template_version_id"`
@@ -429,13 +430,13 @@ func (s *MethodTestSuite) TestProvsionerJob() {
 			Asserts(v.RBACObject(tpl), []rbac.Action{rbac.ActionRead, rbac.ActionUpdate}).Returns()
 	}))
 	s.Run("GetProvisionerJobsByIDs", s.Subtest(func(db database.Store, check *expects) {
-		a := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{})
-		b := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{})
+		a := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
+		b := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
 		check.Args([]uuid.UUID{a.ID, b.ID}).Asserts().Returns(slice.New(a, b))
 	}))
 	s.Run("GetProvisionerLogsAfterID", s.Subtest(func(db database.Store, check *expects) {
 		w := dbgen.Workspace(s.T(), db, database.Workspace{})
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeWorkspaceBuild,
 		})
 		_ = dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{JobID: j.ID, WorkspaceID: w.ID})
@@ -863,8 +864,8 @@ func (s *MethodTestSuite) TestUser() {
 		check.Args(u.ID).Asserts(u, rbac.ActionRead).Returns(u)
 	}))
 	s.Run("GetUsersByIDs", s.Subtest(func(db database.Store, check *expects) {
-		a := dbgen.User(s.T(), db, database.User{CreatedAt: database.Now().Add(-time.Hour)})
-		b := dbgen.User(s.T(), db, database.User{CreatedAt: database.Now()})
+		a := dbgen.User(s.T(), db, database.User{CreatedAt: dbtime.Now().Add(-time.Hour)})
+		b := dbgen.User(s.T(), db, database.User{CreatedAt: dbtime.Now()})
 		check.Args([]uuid.UUID{a.ID, b.ID}).
 			Asserts(a, rbac.ActionRead, b, rbac.ActionRead).
 			Returns(slice.New(a, b))
@@ -1064,8 +1065,10 @@ func (s *MethodTestSuite) TestWorkspace() {
 		res := dbgen.WorkspaceResource(s.T(), db, database.WorkspaceResource{JobID: build.JobID})
 		agt := dbgen.WorkspaceAgent(s.T(), db, database.WorkspaceAgent{ResourceID: res.ID})
 		check.Args(database.UpdateWorkspaceAgentStartupByIDParams{
-			ID:        agt.ID,
-			Subsystem: database.WorkspaceAgentSubsystemNone,
+			ID: agt.ID,
+			Subsystems: []database.WorkspaceAgentSubsystem{
+				database.WorkspaceAgentSubsystemEnvbox,
+			},
 		}).Asserts(ws, rbac.ActionUpdate).Returns()
 	}))
 	s.Run("GetWorkspaceAgentLogsAfter", s.Subtest(func(db database.Store, check *expects) {
@@ -1148,20 +1151,20 @@ func (s *MethodTestSuite) TestWorkspace() {
 	s.Run("GetWorkspaceResourceByID", s.Subtest(func(db database.Store, check *expects) {
 		ws := dbgen.Workspace(s.T(), db, database.Workspace{})
 		build := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{WorkspaceID: ws.ID, JobID: uuid.New()})
-		_ = dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
+		_ = dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
 		res := dbgen.WorkspaceResource(s.T(), db, database.WorkspaceResource{JobID: build.JobID})
 		check.Args(res.ID).Asserts(ws, rbac.ActionRead).Returns(res)
 	}))
 	s.Run("Build/GetWorkspaceResourcesByJobID", s.Subtest(func(db database.Store, check *expects) {
 		ws := dbgen.Workspace(s.T(), db, database.Workspace{})
 		build := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{WorkspaceID: ws.ID, JobID: uuid.New()})
-		job := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
+		job := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
 		check.Args(job.ID).Asserts(ws, rbac.ActionRead).Returns([]database.WorkspaceResource{})
 	}))
 	s.Run("Template/GetWorkspaceResourcesByJobID", s.Subtest(func(db database.Store, check *expects) {
 		tpl := dbgen.Template(s.T(), db, database.Template{})
 		v := dbgen.TemplateVersion(s.T(), db, database.TemplateVersion{TemplateID: uuid.NullUUID{UUID: tpl.ID, Valid: true}, JobID: uuid.New()})
-		job := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{ID: v.JobID, Type: database.ProvisionerJobTypeTemplateVersionImport})
+		job := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{ID: v.JobID, Type: database.ProvisionerJobTypeTemplateVersionImport})
 		check.Args(job.ID).Asserts(v.RBACObject(tpl), []rbac.Action{rbac.ActionRead, rbac.ActionRead}).Returns([]database.WorkspaceResource{})
 	}))
 	s.Run("InsertWorkspace", s.Subtest(func(db database.Store, check *expects) {
@@ -1229,14 +1232,13 @@ func (s *MethodTestSuite) TestWorkspace() {
 			ID: ws.ID,
 		}).Asserts(ws, rbac.ActionUpdate).Returns()
 	}))
-	s.Run("UpdateWorkspaceBuildByID", s.Subtest(func(db database.Store, check *expects) {
+	s.Run("UpdateWorkspaceBuildDeadlineByID", s.Subtest(func(db database.Store, check *expects) {
 		ws := dbgen.Workspace(s.T(), db, database.Workspace{})
 		build := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{WorkspaceID: ws.ID, JobID: uuid.New()})
-		check.Args(database.UpdateWorkspaceBuildByIDParams{
-			ID:               build.ID,
-			UpdatedAt:        build.UpdatedAt,
-			Deadline:         build.Deadline,
-			ProvisionerState: []byte{},
+		check.Args(database.UpdateWorkspaceBuildDeadlineByIDParams{
+			ID:        build.ID,
+			UpdatedAt: build.UpdatedAt,
+			Deadline:  build.Deadline,
 		}).Asserts(ws, rbac.ActionUpdate)
 	}))
 	s.Run("SoftDeleteWorkspaceByID", s.Subtest(func(db database.Store, check *expects) {
@@ -1317,10 +1319,6 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 		dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{})
 		check.Args().Asserts(rbac.ResourceSystem, rbac.ActionRead)
 	}))
-	s.Run("GetWorkspaceAgentByAuthToken", s.Subtest(func(db database.Store, check *expects) {
-		agt := dbgen.WorkspaceAgent(s.T(), db, database.WorkspaceAgent{})
-		check.Args(agt.AuthToken).Asserts(rbac.ResourceSystem, rbac.ActionRead).Returns(agt)
-	}))
 	s.Run("GetActiveUserCount", s.Subtest(func(db database.Store, check *expects) {
 		check.Args().Asserts(rbac.ResourceSystem, rbac.ActionRead).Returns(int64(0))
 	}))
@@ -1379,6 +1377,14 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 			DailyCost: 10,
 		}).Asserts(rbac.ResourceSystem, rbac.ActionUpdate)
 	}))
+	s.Run("UpdateWorkspaceBuildProvisionerStateByID", s.Subtest(func(db database.Store, check *expects) {
+		ws := dbgen.Workspace(s.T(), db, database.Workspace{})
+		build := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{WorkspaceID: ws.ID, JobID: uuid.New()})
+		check.Args(database.UpdateWorkspaceBuildProvisionerStateByIDParams{
+			ID:               build.ID,
+			ProvisionerState: []byte("testing"),
+		}).Asserts(rbac.ResourceSystem, rbac.ActionUpdate)
+	}))
 	s.Run("UpsertLastUpdateCheck", s.Subtest(func(db database.Store, check *expects) {
 		check.Args("value").Asserts(rbac.ResourceSystem, rbac.ActionUpdate)
 	}))
@@ -1412,7 +1418,7 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 	}))
 	s.Run("GetProvisionerJobsCreatedAfter", s.Subtest(func(db database.Store, check *expects) {
 		// TODO: add provisioner job resource type
-		_ = dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{CreatedAt: time.Now().Add(-time.Hour)})
+		_ = dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{CreatedAt: time.Now().Add(-time.Hour)})
 		check.Args(time.Now()).Asserts( /*rbac.ResourceSystem, rbac.ActionRead*/ )
 	}))
 	s.Run("GetTemplateVersionsByIDs", s.Subtest(func(db database.Store, check *expects) {
@@ -1451,11 +1457,11 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 	s.Run("GetWorkspaceResourcesByJobIDs", s.Subtest(func(db database.Store, check *expects) {
 		tpl := dbgen.Template(s.T(), db, database.Template{})
 		v := dbgen.TemplateVersion(s.T(), db, database.TemplateVersion{TemplateID: uuid.NullUUID{UUID: tpl.ID, Valid: true}, JobID: uuid.New()})
-		tJob := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{ID: v.JobID, Type: database.ProvisionerJobTypeTemplateVersionImport})
+		tJob := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{ID: v.JobID, Type: database.ProvisionerJobTypeTemplateVersionImport})
 
 		ws := dbgen.Workspace(s.T(), db, database.Workspace{})
 		build := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{WorkspaceID: ws.ID, JobID: uuid.New()})
-		wJob := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
+		wJob := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
 		check.Args([]uuid.UUID{tJob.ID, wJob.ID}).
 			Asserts(rbac.ResourceSystem, rbac.ActionRead).
 			Returns([]database.WorkspaceResource{})
@@ -1463,7 +1469,7 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 	s.Run("GetWorkspaceResourceMetadataByResourceIDs", s.Subtest(func(db database.Store, check *expects) {
 		ws := dbgen.Workspace(s.T(), db, database.Workspace{})
 		build := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{WorkspaceID: ws.ID, JobID: uuid.New()})
-		_ = dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
+		_ = dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{ID: build.JobID, Type: database.ProvisionerJobTypeWorkspaceBuild})
 		a := dbgen.WorkspaceResource(s.T(), db, database.WorkspaceResource{JobID: build.JobID})
 		b := dbgen.WorkspaceResource(s.T(), db, database.WorkspaceResource{JobID: build.JobID})
 		check.Args([]uuid.UUID{a.ID, b.ID}).
@@ -1480,16 +1486,15 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 	}))
 	s.Run("GetProvisionerJobsByIDs", s.Subtest(func(db database.Store, check *expects) {
 		// TODO: add a ProvisionerJob resource type
-		a := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{})
-		b := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{})
+		a := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
+		b := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
 		check.Args([]uuid.UUID{a.ID, b.ID}).
 			Asserts( /*rbac.ResourceSystem, rbac.ActionRead*/ ).
 			Returns(slice.New(a, b))
 	}))
 	s.Run("InsertWorkspaceAgent", s.Subtest(func(db database.Store, check *expects) {
 		check.Args(database.InsertWorkspaceAgentParams{
-			ID:                    uuid.New(),
-			StartupScriptBehavior: database.StartupScriptBehaviorNonBlocking,
+			ID: uuid.New(),
 		}).Asserts(rbac.ResourceSystem, rbac.ActionCreate)
 	}))
 	s.Run("InsertWorkspaceApp", s.Subtest(func(db database.Store, check *expects) {
@@ -1515,7 +1520,7 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 	}))
 	s.Run("AcquireProvisionerJob", s.Subtest(func(db database.Store, check *expects) {
 		// TODO: we need to create a ProvisionerJob resource
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			StartedAt: sql.NullTime{Valid: false},
 		})
 		check.Args(database.AcquireProvisionerJobParams{Types: []database.ProvisionerType{j.Provisioner}, Tags: must(json.Marshal(j.Tags))}).
@@ -1523,14 +1528,14 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 	}))
 	s.Run("UpdateProvisionerJobWithCompleteByID", s.Subtest(func(db database.Store, check *expects) {
 		// TODO: we need to create a ProvisionerJob resource
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{})
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
 		check.Args(database.UpdateProvisionerJobWithCompleteByIDParams{
 			ID: j.ID,
 		}).Asserts( /*rbac.ResourceSystem, rbac.ActionUpdate*/ )
 	}))
 	s.Run("UpdateProvisionerJobByID", s.Subtest(func(db database.Store, check *expects) {
 		// TODO: we need to create a ProvisionerJob resource
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{})
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
 		check.Args(database.UpdateProvisionerJobByIDParams{
 			ID:        j.ID,
 			UpdatedAt: time.Now(),
@@ -1547,7 +1552,7 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 	}))
 	s.Run("InsertProvisionerJobLogs", s.Subtest(func(db database.Store, check *expects) {
 		// TODO: we need to create a ProvisionerJob resource
-		j := dbgen.ProvisionerJob(s.T(), db, database.ProvisionerJob{})
+		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
 		check.Args(database.InsertProvisionerJobLogsParams{
 			JobID: j.ID,
 		}).Asserts( /*rbac.ResourceSystem, rbac.ActionCreate*/ )

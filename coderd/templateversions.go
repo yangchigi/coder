@@ -18,18 +18,20 @@ import (
 
 	"cdr.dev/slog"
 
-	"github.com/coder/coder/coderd/audit"
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/coderd/gitauth"
-	"github.com/coder/coder/coderd/httpapi"
-	"github.com/coder/coder/coderd/httpmw"
-	"github.com/coder/coder/coderd/parameter"
-	"github.com/coder/coder/coderd/provisionerdserver"
-	"github.com/coder/coder/coderd/rbac"
-	"github.com/coder/coder/coderd/tracing"
-	"github.com/coder/coder/codersdk"
-	"github.com/coder/coder/examples"
-	sdkproto "github.com/coder/coder/provisionersdk/proto"
+	"github.com/coder/coder/v2/coderd/audit"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/coderd/database/provisionerjobs"
+	"github.com/coder/coder/v2/coderd/gitauth"
+	"github.com/coder/coder/v2/coderd/httpapi"
+	"github.com/coder/coder/v2/coderd/httpmw"
+	"github.com/coder/coder/v2/coderd/parameter"
+	"github.com/coder/coder/v2/coderd/provisionerdserver"
+	"github.com/coder/coder/v2/coderd/rbac"
+	"github.com/coder/coder/v2/coderd/tracing"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/examples"
+	sdkproto "github.com/coder/coder/v2/provisionersdk/proto"
 )
 
 // @Summary Get template version by ID
@@ -95,7 +97,7 @@ func (api *API) patchTemplateVersion(rw http.ResponseWriter, r *http.Request) {
 	updateParams := database.UpdateTemplateVersionByIDParams{
 		ID:         templateVersion.ID,
 		TemplateID: templateVersion.TemplateID,
-		UpdatedAt:  database.Now(),
+		UpdatedAt:  dbtime.Now(),
 		Name:       templateVersion.Name,
 		Message:    templateVersion.Message,
 	}
@@ -204,11 +206,11 @@ func (api *API) patchCancelTemplateVersion(rw http.ResponseWriter, r *http.Reque
 	err = api.Database.UpdateProvisionerJobWithCancelByID(ctx, database.UpdateProvisionerJobWithCancelByIDParams{
 		ID: job.ID,
 		CanceledAt: sql.NullTime{
-			Time:  database.Now(),
+			Time:  dbtime.Now(),
 			Valid: true,
 		},
 		CompletedAt: sql.NullTime{
-			Time: database.Now(),
+			Time: dbtime.Now(),
 			// If the job is running, don't mark it completed!
 			Valid: !job.WorkerID.Valid,
 		},
@@ -478,8 +480,8 @@ func (api *API) postTemplateVersionDryRun(rw http.ResponseWriter, r *http.Reques
 	jobID := uuid.New()
 	provisionerJob, err := api.Database.InsertProvisionerJob(ctx, database.InsertProvisionerJobParams{
 		ID:             jobID,
-		CreatedAt:      database.Now(),
-		UpdatedAt:      database.Now(),
+		CreatedAt:      dbtime.Now(),
+		UpdatedAt:      dbtime.Now(),
 		OrganizationID: templateVersion.OrganizationID,
 		InitiatorID:    apiKey.UserID,
 		Provisioner:    job.Provisioner,
@@ -500,6 +502,11 @@ func (api *API) postTemplateVersionDryRun(rw http.ResponseWriter, r *http.Reques
 			Detail:  err.Error(),
 		})
 		return
+	}
+	err = provisionerjobs.PostJob(api.Pubsub, provisionerJob)
+	if err != nil {
+		// Client probably doesn't care about this error, so just log it.
+		api.Logger.Error(ctx, "failed to post provisioner job to pubsub", slog.Error(err))
 	}
 
 	httpapi.Write(ctx, rw, http.StatusCreated, convertProvisionerJob(database.GetProvisionerJobsByIDsWithQueuePositionRow{
@@ -605,11 +612,11 @@ func (api *API) patchTemplateVersionDryRunCancel(rw http.ResponseWriter, r *http
 	err := api.Database.UpdateProvisionerJobWithCancelByID(ctx, database.UpdateProvisionerJobWithCancelByIDParams{
 		ID: job.ProvisionerJob.ID,
 		CanceledAt: sql.NullTime{
-			Time:  database.Now(),
+			Time:  dbtime.Now(),
 			Valid: true,
 		},
 		CompletedAt: sql.NullTime{
-			Time: database.Now(),
+			Time: dbtime.Now(),
 			// If the job is running, don't mark it completed!
 			Valid: !job.ProvisionerJob.WorkerID.Valid,
 		},
@@ -1036,7 +1043,7 @@ func (api *API) patchActiveTemplateVersion(rw http.ResponseWriter, r *http.Reque
 		err = store.UpdateTemplateActiveVersionByID(ctx, database.UpdateTemplateActiveVersionByIDParams{
 			ID:              template.ID,
 			ActiveVersionID: req.ID,
-			UpdatedAt:       database.Now(),
+			UpdatedAt:       dbtime.Now(),
 		})
 		if err != nil {
 			return xerrors.Errorf("update active version: %w", err)
@@ -1174,7 +1181,7 @@ func (api *API) postTemplateVersionsByOrganization(rw http.ResponseWriter, r *ht
 				ID:        uuid.New(),
 				Hash:      hash,
 				CreatedBy: apiKey.UserID,
-				CreatedAt: database.Now(),
+				CreatedAt: dbtime.Now(),
 				Mimetype:  tarMimeType,
 				Data:      tar,
 			})
@@ -1227,8 +1234,8 @@ func (api *API) postTemplateVersionsByOrganization(rw http.ResponseWriter, r *ht
 
 		provisionerJob, err = tx.InsertProvisionerJob(ctx, database.InsertProvisionerJobParams{
 			ID:             jobID,
-			CreatedAt:      database.Now(),
-			UpdatedAt:      database.Now(),
+			CreatedAt:      dbtime.Now(),
+			UpdatedAt:      dbtime.Now(),
 			OrganizationID: organization.ID,
 			InitiatorID:    apiKey.UserID,
 			Provisioner:    database.ProvisionerType(req.Provisioner),
@@ -1262,8 +1269,8 @@ func (api *API) postTemplateVersionsByOrganization(rw http.ResponseWriter, r *ht
 			ID:             templateVersionID,
 			TemplateID:     templateID,
 			OrganizationID: organization.ID,
-			CreatedAt:      database.Now(),
-			UpdatedAt:      database.Now(),
+			CreatedAt:      dbtime.Now(),
+			UpdatedAt:      dbtime.Now(),
 			Name:           req.Name,
 			Message:        req.Message,
 			Readme:         "",
@@ -1288,6 +1295,11 @@ func (api *API) postTemplateVersionsByOrganization(rw http.ResponseWriter, r *ht
 		return
 	}
 	aReq.New = templateVersion
+	err = provisionerjobs.PostJob(api.Pubsub, provisionerJob)
+	if err != nil {
+		// Client probably doesn't care about this error, so just log it.
+		api.Logger.Error(ctx, "failed to post provisioner job to pubsub", slog.Error(err))
+	}
 
 	httpapi.Write(ctx, rw, http.StatusCreated, convertTemplateVersion(templateVersion, convertProvisionerJob(database.GetProvisionerJobsByIDsWithQueuePositionRow{
 		ProvisionerJob: provisionerJob,

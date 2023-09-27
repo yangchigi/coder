@@ -22,22 +22,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"cdr.dev/slog"
-	"github.com/coder/coder/coderd"
-	agplaudit "github.com/coder/coder/coderd/audit"
-	"github.com/coder/coder/coderd/database/dbauthz"
-	"github.com/coder/coder/coderd/httpapi"
-	"github.com/coder/coder/coderd/httpmw"
-	"github.com/coder/coder/coderd/rbac"
-	agplschedule "github.com/coder/coder/coderd/schedule"
-	"github.com/coder/coder/codersdk"
-	"github.com/coder/coder/enterprise/coderd/license"
-	"github.com/coder/coder/enterprise/coderd/proxyhealth"
-	"github.com/coder/coder/enterprise/coderd/schedule"
-	"github.com/coder/coder/enterprise/derpmesh"
-	"github.com/coder/coder/enterprise/replicasync"
-	"github.com/coder/coder/enterprise/tailnet"
-	"github.com/coder/coder/provisionerd/proto"
-	agpltailnet "github.com/coder/coder/tailnet"
+	"github.com/coder/coder/v2/coderd"
+	agplaudit "github.com/coder/coder/v2/coderd/audit"
+	"github.com/coder/coder/v2/coderd/database/dbauthz"
+	"github.com/coder/coder/v2/coderd/httpapi"
+	"github.com/coder/coder/v2/coderd/httpmw"
+	"github.com/coder/coder/v2/coderd/rbac"
+	agplschedule "github.com/coder/coder/v2/coderd/schedule"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/enterprise/coderd/license"
+	"github.com/coder/coder/v2/enterprise/coderd/proxyhealth"
+	"github.com/coder/coder/v2/enterprise/coderd/schedule"
+	"github.com/coder/coder/v2/enterprise/dbcrypt"
+	"github.com/coder/coder/v2/enterprise/derpmesh"
+	"github.com/coder/coder/v2/enterprise/replicasync"
+	"github.com/coder/coder/v2/enterprise/tailnet"
+	"github.com/coder/coder/v2/provisionerd/proto"
+	agpltailnet "github.com/coder/coder/v2/tailnet"
 )
 
 // New constructs an Enterprise coderd API instance.
@@ -47,8 +48,8 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
 	if options.EntitlementsUpdateInterval == 0 {
 		options.EntitlementsUpdateInterval = 10 * time.Minute
 	}
-	if options.Keys == nil {
-		options.Keys = Keys
+	if options.LicenseKeys == nil {
+		options.LicenseKeys = Keys
 	}
 	if options.Options == nil {
 		options.Options = &coderd.Options{}
@@ -61,12 +62,44 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
 	}
 
 	ctx, cancelFunc := context.WithCancel(ctx)
-	api := &API{
-		ctx:    ctx,
-		cancel: cancelFunc,
 
+	if options.ExternalTokenEncryption == nil {
+		options.ExternalTokenEncryption = make([]dbcrypt.Cipher, 0)
+	}
+	// Database encryption is an enterprise feature, but as checking license entitlements
+	// depends on the database, we end up in a chicken-and-egg situation. To avoid this,
+	// we always enable it but only soft-enforce it.
+	if len(options.ExternalTokenEncryption) > 0 {
+		var keyDigests []string
+		for _, cipher := range options.ExternalTokenEncryption {
+			keyDigests = append(keyDigests, cipher.HexDigest())
+		}
+		options.Logger.Info(ctx, "database encryption enabled", slog.F("keys", keyDigests))
+	}
+
+	cryptDB, err := dbcrypt.New(ctx, options.Database, options.ExternalTokenEncryption...)
+	if err != nil {
+		cancelFunc()
+		// If we fail to initialize the database, it's likely that the
+		// database is encrypted with an unknown external token encryption key.
+		// This is a fatal error.
+		var derr *dbcrypt.DecryptFailedError
+		if xerrors.As(err, &derr) {
+			return nil, xerrors.Errorf("database encrypted with unknown key, either add the key or see https://coder.com/docs/v2/latest/admin/encryption#disabling-encryption: %w", derr)
+		}
+		return nil, xerrors.Errorf("init database encryption: %w", err)
+	}
+	options.Database = cryptDB
+
+	api := &API{
+		ctx:     ctx,
+		cancel:  cancelFunc,
 		AGPL:    coderd.New(options.Options),
 		Options: options,
+		provisionerDaemonAuth: &provisionerDaemonAuth{
+			psk:        options.ProvisionerDaemonPSK,
+			authorizer: options.Authorizer,
+		},
 	}
 	defer func() {
 		if err != nil {
@@ -126,6 +159,7 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
 		})
 		r.Route("/licenses", func(r chi.Router) {
 			r.Use(apiKeyMiddleware)
+			r.Post("/refresh-entitlements", api.postRefreshEntitlements)
 			r.Post("/", api.postLicense)
 			r.Get("/", api.licenses)
 			r.Delete("/{id}", api.deleteLicense)
@@ -163,6 +197,7 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
 				)
 				r.Get("/coordinate", api.workspaceProxyCoordinate)
 				r.Post("/issue-signed-app-token", api.workspaceProxyIssueSignedAppToken)
+				r.Post("/app-stats", api.workspaceProxyReportAppStats)
 				r.Post("/register", api.workspaceProxyRegister)
 				r.Post("/deregister", api.workspaceProxyDeregister)
 			})
@@ -193,14 +228,21 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
 				r.Get("/", api.groupByOrganization)
 			})
 		})
+		// TODO: provisioner daemons are not scoped to organizations in the database, so placing them
+		// under an organization route doesn't make sense.  In order to allow the /serve endpoint to
+		// work with a pre-shared key (PSK) without an API key, these routes will simply ignore the
+		// value of {organization}.  That is, the route will work with any organization ID, whether or
+		// not it exits.  This doesn't leak any information about the existence of organizations, so is
+		// fine from a security perspective, but might be a little surprising.
+		//
+		// We may in future decide to scope provisioner daemons to organizations, so we'll keep the API
+		// route as is.
 		r.Route("/organizations/{organization}/provisionerdaemons", func(r chi.Router) {
 			r.Use(
 				api.provisionerDaemonsEnabledMW,
-				apiKeyMiddleware,
-				httpmw.ExtractOrganizationParam(api.Database),
 			)
-			r.Get("/", api.provisionerDaemons)
-			r.Get("/serve", api.provisionerDaemonServe)
+			r.With(apiKeyMiddleware).Get("/", api.provisionerDaemons)
+			r.With(apiKeyMiddlewareOptional).Get("/serve", api.provisionerDaemonServe)
 		})
 		r.Route("/templates/{template}/acl", func(r chi.Router) {
 			r.Use(
@@ -252,7 +294,7 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
 		})
 		r.Route("/users/{user}/quiet-hours", func(r chi.Router) {
 			r.Use(
-				api.restartRequirementEnabledMW,
+				api.autostopRequirementEnabledMW,
 				apiKeyMiddleware,
 				httpmw.ExtractUserParam(options.Database, false),
 			)
@@ -351,6 +393,8 @@ type Options struct {
 	BrowserOnly bool
 	SCIMAPIKey  []byte
 
+	ExternalTokenEncryption []dbcrypt.Cipher
+
 	// Used for high availability.
 	ReplicaSyncUpdateInterval time.Duration
 	DERPServerRelayAddress    string
@@ -361,7 +405,12 @@ type Options struct {
 
 	EntitlementsUpdateInterval time.Duration
 	ProxyHealthInterval        time.Duration
-	Keys                       map[string]ed25519.PublicKey
+	LicenseKeys                map[string]ed25519.PublicKey
+
+	// optional pre-shared key for authentication of external provisioner daemons
+	ProvisionerDaemonPSK string
+
+	CheckInactiveUsersCancelFunc func()
 }
 
 type API struct {
@@ -383,15 +432,24 @@ type API struct {
 	entitlementsUpdateMu sync.Mutex
 	entitlementsMu       sync.RWMutex
 	entitlements         codersdk.Entitlements
+
+	provisionerDaemonAuth *provisionerDaemonAuth
 }
 
 func (api *API) Close() error {
-	api.cancel()
+	// Replica manager should be closed first. This is because the replica
+	// manager updates the replica's table in the database when it closes.
+	// This tells other Coderds that it is now offline.
 	if api.replicaManager != nil {
 		_ = api.replicaManager.Close()
 	}
+	api.cancel()
 	if api.derpMesh != nil {
 		_ = api.derpMesh.Close()
+	}
+
+	if api.Options.CheckInactiveUsersCancelFunc != nil {
+		api.Options.CheckInactiveUsersCancelFunc()
 	}
 	return api.AGPL.Close()
 }
@@ -402,20 +460,21 @@ func (api *API) updateEntitlements(ctx context.Context) error {
 
 	entitlements, err := license.Entitlements(
 		ctx, api.Database,
-		api.Logger, len(api.replicaManager.AllPrimary()), len(api.GitAuthConfigs), api.Keys, map[codersdk.FeatureName]bool{
+		api.Logger, len(api.replicaManager.AllPrimary()), len(api.GitAuthConfigs), api.LicenseKeys, map[codersdk.FeatureName]bool{
 			codersdk.FeatureAuditLog:                   api.AuditLogging,
 			codersdk.FeatureBrowserOnly:                api.BrowserOnly,
 			codersdk.FeatureSCIM:                       len(api.SCIMAPIKey) != 0,
 			codersdk.FeatureHighAvailability:           api.DERPServerRelayAddress != "",
 			codersdk.FeatureMultipleGitAuth:            len(api.GitAuthConfigs) > 1,
 			codersdk.FeatureTemplateRBAC:               api.RBAC,
+			codersdk.FeatureExternalTokenEncryption:    len(api.ExternalTokenEncryption) > 0,
 			codersdk.FeatureExternalProvisionerDaemons: true,
 			codersdk.FeatureAdvancedTemplateScheduling: true,
-			// FeatureTemplateRestartRequirement depends on
+			// FeatureTemplateAutostopRequirement depends on
 			// FeatureAdvancedTemplateScheduling.
-			codersdk.FeatureTemplateRestartRequirement: api.DefaultQuietHoursSchedule != "",
-			codersdk.FeatureWorkspaceProxy:             true,
-			codersdk.FeatureUserRoleManagement:         true,
+			codersdk.FeatureTemplateAutostopRequirement: api.AGPL.Experiments.Enabled(codersdk.ExperimentTemplateAutostopRequirement) && api.DefaultQuietHoursSchedule != "",
+			codersdk.FeatureWorkspaceProxy:              true,
+			codersdk.FeatureUserRoleManagement:          true,
 		})
 	if err != nil {
 		return err
@@ -434,15 +493,15 @@ func (api *API) updateEntitlements(ctx context.Context) error {
 		return nil
 	}
 
-	if entitlements.Features[codersdk.FeatureTemplateRestartRequirement].Enabled && !entitlements.Features[codersdk.FeatureAdvancedTemplateScheduling].Enabled {
+	if entitlements.Features[codersdk.FeatureTemplateAutostopRequirement].Enabled && !entitlements.Features[codersdk.FeatureAdvancedTemplateScheduling].Enabled {
 		api.entitlements.Errors = []string{
-			`Your license is entitled to the feature "template restart ` +
+			`Your license is entitled to the feature "template autostop ` +
 				`requirement" (and you have it enabled by setting the ` +
 				"default quiet hours schedule), but you are not entitled to " +
 				`the dependency feature "advanced template scheduling". ` +
 				"Please contact support for a new license.",
 		}
-		api.Logger.Error(ctx, "license is entitled to template restart requirement but not advanced template scheduling")
+		api.Logger.Error(ctx, "license is entitled to template autostop requirement but not advanced template scheduling")
 		return nil
 	}
 
@@ -481,7 +540,10 @@ func (api *API) updateEntitlements(ctx context.Context) error {
 
 	if initial, changed, enabled := featureChanged(codersdk.FeatureTemplateRBAC); shouldUpdate(initial, changed, enabled) {
 		if enabled {
-			committer := committer{Database: api.Database}
+			committer := committer{
+				Log:      api.Logger.Named("quota_committer"),
+				Database: api.Database,
+			}
 			ptr := proto.QuotaCommitter(&committer)
 			api.AGPL.QuotaCommitter.Store(&ptr)
 		} else {
@@ -491,7 +553,7 @@ func (api *API) updateEntitlements(ctx context.Context) error {
 
 	if initial, changed, enabled := featureChanged(codersdk.FeatureAdvancedTemplateScheduling); shouldUpdate(initial, changed, enabled) {
 		if enabled {
-			templateStore := schedule.NewEnterpriseTemplateScheduleStore()
+			templateStore := schedule.NewEnterpriseTemplateScheduleStore(api.AGPL.UserQuietHoursScheduleStore)
 			templateStoreInterface := agplschedule.TemplateScheduleStore(templateStore)
 			api.AGPL.TemplateScheduleStore.Store(&templateStoreInterface)
 		} else {
@@ -500,30 +562,30 @@ func (api *API) updateEntitlements(ctx context.Context) error {
 		}
 	}
 
-	if initial, changed, enabled := featureChanged(codersdk.FeatureTemplateRestartRequirement); shouldUpdate(initial, changed, enabled) {
+	if initial, changed, enabled := featureChanged(codersdk.FeatureTemplateAutostopRequirement); shouldUpdate(initial, changed, enabled) {
 		if enabled {
 			templateStore := *(api.AGPL.TemplateScheduleStore.Load())
 			enterpriseTemplateStore, ok := templateStore.(*schedule.EnterpriseTemplateScheduleStore)
 			if !ok {
-				api.Logger.Error(ctx, "unable to set up enterprise template schedule store, template restart requirements will not be applied to workspace builds")
+				api.Logger.Error(ctx, "unable to set up enterprise template schedule store, template autostop requirements will not be applied to workspace builds")
 			}
-			enterpriseTemplateStore.UseRestartRequirement.Store(true)
+			enterpriseTemplateStore.UseAutostopRequirement.Store(true)
 
 			quietHoursStore, err := schedule.NewEnterpriseUserQuietHoursScheduleStore(api.DefaultQuietHoursSchedule)
 			if err != nil {
-				api.Logger.Error(ctx, "unable to set up enterprise user quiet hours schedule store, template restart requirements will not be applied to workspace builds", slog.Error(err))
+				api.Logger.Error(ctx, "unable to set up enterprise user quiet hours schedule store, template autostop requirements will not be applied to workspace builds", slog.Error(err))
 			} else {
 				api.AGPL.UserQuietHoursScheduleStore.Store(&quietHoursStore)
 			}
 		} else {
 			if api.DefaultQuietHoursSchedule != "" {
-				api.Logger.Warn(ctx, "template restart requirements are not enabled (due to setting default quiet hours schedule) as your license is not entitled to this feature")
+				api.Logger.Warn(ctx, "template autostop requirements are not enabled (due to setting default quiet hours schedule) as your license is not entitled to this feature")
 			}
 
 			templateStore := *(api.AGPL.TemplateScheduleStore.Load())
 			enterpriseTemplateStore, ok := templateStore.(*schedule.EnterpriseTemplateScheduleStore)
 			if ok {
-				enterpriseTemplateStore.UseRestartRequirement.Store(false)
+				enterpriseTemplateStore.UseAutostopRequirement.Store(false)
 			}
 
 			quietHoursStore := agplschedule.NewAGPLUserQuietHoursScheduleStore()
@@ -578,12 +640,22 @@ func (api *API) updateEntitlements(ctx context.Context) error {
 
 	if initial, changed, enabled := featureChanged(codersdk.FeatureWorkspaceProxy); shouldUpdate(initial, changed, enabled) {
 		if enabled {
-			fn := derpMapper(api.Logger, api.DeploymentValues, api.ProxyHealth)
+			fn := derpMapper(api.Logger, api.ProxyHealth)
 			api.AGPL.DERPMapper.Store(&fn)
 		} else {
 			api.AGPL.DERPMapper.Store(nil)
 		}
 	}
+
+	// External token encryption is soft-enforced
+	featureExternalTokenEncryption := entitlements.Features[codersdk.FeatureExternalTokenEncryption]
+	featureExternalTokenEncryption.Enabled = len(api.ExternalTokenEncryption) > 0
+	if featureExternalTokenEncryption.Enabled && featureExternalTokenEncryption.Entitlement != codersdk.EntitlementEntitled {
+		msg := fmt.Sprintf("%s is enabled (due to setting external token encryption keys) but your license is not entitled to this feature.", codersdk.FeatureExternalTokenEncryption.Humanize())
+		api.Logger.Warn(ctx, msg)
+		entitlements.Warnings = append(entitlements.Warnings, msg)
+	}
+	entitlements.Features[codersdk.FeatureExternalTokenEncryption] = featureExternalTokenEncryption
 
 	api.entitlementsMu.Lock()
 	defer api.entitlementsMu.Unlock()
@@ -643,7 +715,7 @@ var (
 	lastDerpConflictLog   time.Time
 )
 
-func derpMapper(logger slog.Logger, cfg *codersdk.DeploymentValues, proxyHealth *proxyhealth.ProxyHealth) func(*tailcfg.DERPMap) *tailcfg.DERPMap {
+func derpMapper(logger slog.Logger, proxyHealth *proxyhealth.ProxyHealth) func(*tailcfg.DERPMap) *tailcfg.DERPMap {
 	return func(derpMap *tailcfg.DERPMap) *tailcfg.DERPMap {
 		derpMap = derpMap.Clone()
 
@@ -737,43 +809,22 @@ func derpMapper(logger slog.Logger, cfg *codersdk.DeploymentValues, proxyHealth 
 				}
 			}
 
-			var stunNodes []*tailcfg.DERPNode
-			if !cfg.DERP.Config.BlockDirect.Value() {
-				stunNodes, err = agpltailnet.STUNNodes(regionID, cfg.DERP.Server.STUNAddresses)
-				if err != nil {
-					// Log a warning if we haven't logged one in the last
-					// minute.
-					lastDerpConflictMutex.Lock()
-					shouldLog := lastDerpConflictLog.IsZero() || time.Since(lastDerpConflictLog) > time.Minute
-					if shouldLog {
-						lastDerpConflictLog = time.Now()
-					}
-					lastDerpConflictMutex.Unlock()
-					if shouldLog {
-						logger.Error(context.Background(), "failed to calculate STUN nodes", slog.Error(err))
-					}
-
-					// No continue because we can keep going.
-					stunNodes = []*tailcfg.DERPNode{}
-				}
-			}
-
-			nodes := append(stunNodes, &tailcfg.DERPNode{
-				Name:      fmt.Sprintf("%da", regionID),
-				RegionID:  regionID,
-				HostName:  u.Hostname(),
-				DERPPort:  portInt,
-				STUNPort:  -1,
-				ForceHTTP: u.Scheme == "http",
-			})
-
 			derpMap.Regions[regionID] = &tailcfg.DERPRegion{
 				// EmbeddedRelay ONLY applies to the primary.
 				EmbeddedRelay: false,
 				RegionID:      regionID,
 				RegionCode:    regionCode,
 				RegionName:    regionName,
-				Nodes:         nodes,
+				Nodes: []*tailcfg.DERPNode{
+					{
+						Name:      fmt.Sprintf("%da", regionID),
+						RegionID:  regionID,
+						HostName:  u.Hostname(),
+						DERPPort:  portInt,
+						STUNPort:  -1,
+						ForceHTTP: u.Scheme == "http",
+					},
+				},
 			}
 		}
 
@@ -803,6 +854,17 @@ func (api *API) runEntitlementsLoop(ctx context.Context) {
 	updates := make(chan struct{}, 1)
 	subscribed := false
 
+	defer func() {
+		// If this function ends, it means the context was canceled and this
+		// coderd is shutting down. In this case, post a pubsub message to
+		// tell other coderd's to resync their entitlements. This is required to
+		// make sure things like replica counts are updated in the UI.
+		// Ignore the error, as this is just a best effort. If it fails,
+		// the system will eventually recover as replicas timeout
+		// if their heartbeats stop. The best effort just tries to update the
+		// UI faster if it succeeds.
+		_ = api.Pubsub.Publish(PubsubEventLicenses, []byte("going away"))
+	}()
 	for {
 		select {
 		case <-ctx.Done():

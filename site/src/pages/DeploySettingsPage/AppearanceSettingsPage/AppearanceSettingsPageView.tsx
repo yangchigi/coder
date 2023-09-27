@@ -1,73 +1,73 @@
-import { useState } from "react"
-import { Header } from "components/DeploySettingsLayout/Header"
+import { useState } from "react";
+import { Header } from "components/DeploySettingsLayout/Header";
 import {
   Badges,
   DisabledBadge,
   EnterpriseBadge,
   EntitledBadge,
-} from "components/DeploySettingsLayout/Badges"
-import InputAdornment from "@mui/material/InputAdornment"
-import { Fieldset } from "components/DeploySettingsLayout/Fieldset"
-import { getFormHelpers } from "utils/formUtils"
-import Button from "@mui/material/Button"
-import FormControlLabel from "@mui/material/FormControlLabel"
-import { BlockPicker } from "react-color"
-import { useTranslation } from "react-i18next"
-import makeStyles from "@mui/styles/makeStyles"
-import Switch from "@mui/material/Switch"
-import TextField from "@mui/material/TextField"
-import { UpdateAppearanceConfig } from "api/typesGenerated"
-import { Stack } from "components/Stack/Stack"
-import { useFormik } from "formik"
-import { useTheme } from "@mui/styles"
-import Link from "@mui/material/Link"
+} from "components/DeploySettingsLayout/Badges";
+import InputAdornment from "@mui/material/InputAdornment";
+import { Fieldset } from "components/DeploySettingsLayout/Fieldset";
+import { getFormHelpers } from "utils/formUtils";
+import Button from "@mui/material/Button";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import { BlockPicker } from "react-color";
+import makeStyles from "@mui/styles/makeStyles";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import { UpdateAppearanceConfig } from "api/typesGenerated";
+import { Stack } from "components/Stack/Stack";
+import { useFormik } from "formik";
+import { useTheme } from "@mui/styles";
+import Link from "@mui/material/Link";
+import { colors } from "theme/colors";
 
 export type AppearanceSettingsPageViewProps = {
-  appearance: UpdateAppearanceConfig
-  isEntitled: boolean
-  updateAppearance: (
+  appearance: UpdateAppearanceConfig;
+  isEntitled: boolean;
+  onSaveAppearance: (
     newConfig: Partial<UpdateAppearanceConfig>,
     preview: boolean,
-  ) => void
-}
+  ) => void;
+};
 export const AppearanceSettingsPageView = ({
   appearance,
   isEntitled,
-  updateAppearance,
+  onSaveAppearance,
 }: AppearanceSettingsPageViewProps): JSX.Element => {
-  const styles = useStyles()
-  const theme = useTheme()
-  const [t] = useTranslation("appearanceSettings")
+  const styles = useStyles();
+  const theme = useTheme();
   const logoForm = useFormik<{
-    logo_url: string
+    logo_url: string;
   }>({
     initialValues: {
       logo_url: appearance.logo_url,
     },
-    onSubmit: (values) => updateAppearance(values, false),
-  })
-  const logoFieldHelpers = getFormHelpers(logoForm)
+    onSubmit: (values) => onSaveAppearance(values, false),
+  });
+  const logoFieldHelpers = getFormHelpers(logoForm);
 
   const serviceBannerForm = useFormik<UpdateAppearanceConfig["service_banner"]>(
     {
       initialValues: {
         message: appearance.service_banner.message,
         enabled: appearance.service_banner.enabled,
-        background_color: appearance.service_banner.background_color,
+        background_color:
+          appearance.service_banner.background_color ?? colors.blue[7],
       },
       onSubmit: (values) =>
-        updateAppearance(
+        onSaveAppearance(
           {
             service_banner: values,
           },
           false,
         ),
     },
-  )
-  const serviceBannerFieldHelpers = getFormHelpers(serviceBannerForm)
+  );
+  const serviceBannerFieldHelpers = getFormHelpers(serviceBannerForm);
   const [backgroundColor, setBackgroundColor] = useState(
     serviceBannerForm.values.background_color,
-  )
+  );
   return (
     <>
       <Header
@@ -123,7 +123,7 @@ export const AppearanceSettingsPageView = ({
           !isEntitled && (
             <Button
               onClick={() => {
-                updateAppearance(
+                onSaveAppearance(
                   {
                     service_banner: {
                       message:
@@ -133,10 +133,10 @@ export const AppearanceSettingsPageView = ({
                     },
                   },
                   true,
-                )
+                );
               }}
             >
-              {t("showPreviewLabel")}
+              Show Preview
             </Button>
           )
         }
@@ -157,18 +157,18 @@ export const AppearanceSettingsPageView = ({
                 <Switch
                   checked={serviceBannerForm.values.enabled}
                   onChange={async () => {
-                    const newState = !serviceBannerForm.values.enabled
+                    const newState = !serviceBannerForm.values.enabled;
                     const newBanner = {
                       ...serviceBannerForm.values,
                       enabled: newState,
-                    }
-                    updateAppearance(
+                    };
+                    onSaveAppearance(
                       {
                         service_banner: newBanner,
                       },
                       false,
-                    )
-                    await serviceBannerForm.setFieldValue("enabled", newState)
+                    );
+                    await serviceBannerForm.setFieldValue("enabled", newState);
                   }}
                 />
               }
@@ -178,7 +178,7 @@ export const AppearanceSettingsPageView = ({
               <TextField
                 {...serviceBannerFieldHelpers(
                   "message",
-                  t("messageHelperText"),
+                  "Markdown bold, italics, and links are supported.",
                 )}
                 fullWidth
                 label="Message"
@@ -191,12 +191,12 @@ export const AppearanceSettingsPageView = ({
               <BlockPicker
                 color={backgroundColor}
                 onChange={async (color) => {
-                  setBackgroundColor(color.hex)
+                  setBackgroundColor(color.hex);
                   await serviceBannerForm.setFieldValue(
                     "background_color",
                     color.hex,
-                  )
-                  updateAppearance(
+                  );
+                  onSaveAppearance(
                     {
                       service_banner: {
                         ...serviceBannerForm.values,
@@ -204,7 +204,7 @@ export const AppearanceSettingsPageView = ({
                       },
                     },
                     true,
-                  )
+                  );
                 }}
                 triangle="hide"
                 colors={["#004852", "#D65D0F", "#4CD473", "#D94A5D", "#5A00CF"]}
@@ -229,8 +229,8 @@ export const AppearanceSettingsPageView = ({
         )}
       </Fieldset>
     </>
-  )
-}
+  );
+};
 
 const useStyles = makeStyles((theme) => ({
   form: {
@@ -244,4 +244,4 @@ const useStyles = makeStyles((theme) => ({
       maxWidth: "100%",
     },
   },
-}))
+}));

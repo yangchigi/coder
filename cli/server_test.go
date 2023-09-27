@@ -34,16 +34,19 @@ import (
 	"go.uber.org/goleak"
 	"gopkg.in/yaml.v3"
 
-	"github.com/coder/coder/cli"
-	"github.com/coder/coder/cli/clitest"
-	"github.com/coder/coder/cli/config"
-	"github.com/coder/coder/coderd/coderdtest"
-	"github.com/coder/coder/coderd/database/postgres"
-	"github.com/coder/coder/coderd/telemetry"
-	"github.com/coder/coder/codersdk"
-	"github.com/coder/coder/cryptorand"
-	"github.com/coder/coder/pty/ptytest"
-	"github.com/coder/coder/testutil"
+	"cdr.dev/slog/sloggers/slogtest"
+
+	"github.com/coder/coder/v2/cli"
+	"github.com/coder/coder/v2/cli/clitest"
+	"github.com/coder/coder/v2/cli/config"
+	"github.com/coder/coder/v2/coderd/coderdtest"
+	"github.com/coder/coder/v2/coderd/database/dbtestutil"
+	"github.com/coder/coder/v2/coderd/database/postgres"
+	"github.com/coder/coder/v2/coderd/telemetry"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/cryptorand"
+	"github.com/coder/coder/v2/pty/ptytest"
+	"github.com/coder/coder/v2/testutil"
 )
 
 func TestReadGitAuthProvidersFromEnv(t *testing.T) {
@@ -1309,6 +1312,7 @@ func TestServer(t *testing.T) {
 				"--in-memory",
 				"--http-address", ":0",
 				"--access-url", "http://example.com",
+				"--provisioner-daemons-echo",
 				"--log-human", fiName,
 			)
 			clitest.Start(t, root)
@@ -1326,6 +1330,7 @@ func TestServer(t *testing.T) {
 				"--in-memory",
 				"--http-address", ":0",
 				"--access-url", "http://example.com",
+				"--provisioner-daemons-echo",
 				"--log-human", fi,
 			)
 			clitest.Start(t, root)
@@ -1343,6 +1348,7 @@ func TestServer(t *testing.T) {
 				"--in-memory",
 				"--http-address", ":0",
 				"--access-url", "http://example.com",
+				"--provisioner-daemons-echo",
 				"--log-json", fi,
 			)
 			clitest.Start(t, root)
@@ -1363,6 +1369,7 @@ func TestServer(t *testing.T) {
 				"--in-memory",
 				"--http-address", ":0",
 				"--access-url", "http://example.com",
+				"--provisioner-daemons-echo",
 				"--log-stackdriver", fi,
 			)
 			// Attach pty so we get debug output from the command if this test
@@ -1397,6 +1404,7 @@ func TestServer(t *testing.T) {
 				"--in-memory",
 				"--http-address", ":0",
 				"--access-url", "http://example.com",
+				"--provisioner-daemons-echo",
 				"--log-human", fi1,
 				"--log-json", fi2,
 				"--log-stackdriver", fi3,
@@ -1491,31 +1499,6 @@ func TestServer(t *testing.T) {
 			w.RequireSuccess()
 		})
 	})
-	t.Run("DisableDERP", func(t *testing.T) {
-		t.Parallel()
-
-		// Make sure that $CODER_DERP_SERVER_STUN_ADDRESSES can be set to
-		// disable STUN.
-
-		inv, cfg := clitest.New(t,
-			"server",
-			"--in-memory",
-			"--http-address", ":0",
-			"--access-url", "https://example.com",
-		)
-		inv.Environ.Set("CODER_DERP_SERVER_STUN_ADDRESSES", "disable")
-		ptytest.New(t).Attach(inv)
-		clitest.Start(t, inv)
-		gotURL := waitAccessURL(t, cfg)
-		client := codersdk.New(gotURL)
-
-		ctx := testutil.Context(t, testutil.WaitMedium)
-		_ = coderdtest.CreateFirstUser(t, client)
-		gotConfig, err := client.DeploymentConfig(ctx)
-		require.NoError(t, err)
-
-		require.Len(t, gotConfig.Values.DERP.Server.STUNAddresses, 0)
-	})
 }
 
 func TestServer_Production(t *testing.T) {
@@ -1579,6 +1562,20 @@ func TestServer_Shutdown(t *testing.T) {
 	// has already exited, which could cause the test to fail due to interrupt.
 	err = <-serverErr
 	require.NoError(t, err)
+}
+
+func BenchmarkServerHelp(b *testing.B) {
+	// server --help is a good proxy for measuring the
+	// constant overhead of each command.
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		inv, _ := clitest.New(b, "server", "--help")
+		inv.Stdout = io.Discard
+		inv.Stderr = io.Discard
+		err := inv.Run()
+		require.NoError(b, err)
+	}
 }
 
 func generateTLSCertificate(t testing.TB, commonName ...string) (certPath, keyPath string) {
@@ -1676,4 +1673,27 @@ func TestServerYAMLConfig(t *testing.T) {
 	got = clitest.NormalizeGoldenFile(t, got)
 
 	require.Equal(t, string(wantByt), string(got))
+}
+
+func TestConnectToPostgres(t *testing.T) {
+	t.Parallel()
+
+	if !dbtestutil.WillUsePostgres() {
+		t.Skip("this test does not make sense without postgres")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitShort)
+	t.Cleanup(cancel)
+
+	log := slogtest.Make(t, nil)
+
+	dbURL, closeFunc, err := postgres.Open()
+	require.NoError(t, err)
+	t.Cleanup(closeFunc)
+
+	sqlDB, err := cli.ConnectToPostgres(ctx, log, "postgres", dbURL)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
+	require.NoError(t, sqlDB.PingContext(ctx))
 }

@@ -31,16 +31,13 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/fullsailor/pkcs7"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/moby/moby/pkg/namesgenerator"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/oauth2"
 	"golang.org/x/xerrors"
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
@@ -51,37 +48,39 @@ import (
 	"tailscale.com/types/nettype"
 
 	"cdr.dev/slog"
+	"cdr.dev/slog/sloggers/sloghuman"
 	"cdr.dev/slog/sloggers/slogtest"
-	"github.com/coder/coder/coderd"
-	"github.com/coder/coder/coderd/audit"
-	"github.com/coder/coder/coderd/autobuild"
-	"github.com/coder/coder/coderd/awsidentity"
-	"github.com/coder/coder/coderd/database"
-	"github.com/coder/coder/coderd/database/dbauthz"
-	"github.com/coder/coder/coderd/database/dbtestutil"
-	"github.com/coder/coder/coderd/database/pubsub"
-	"github.com/coder/coder/coderd/gitauth"
-	"github.com/coder/coder/coderd/gitsshkey"
-	"github.com/coder/coder/coderd/healthcheck"
-	"github.com/coder/coder/coderd/httpapi"
-	"github.com/coder/coder/coderd/httpmw"
-	"github.com/coder/coder/coderd/rbac"
-	"github.com/coder/coder/coderd/schedule"
-	"github.com/coder/coder/coderd/telemetry"
-	"github.com/coder/coder/coderd/unhanger"
-	"github.com/coder/coder/coderd/updatecheck"
-	"github.com/coder/coder/coderd/util/ptr"
-	"github.com/coder/coder/coderd/workspaceapps"
-	"github.com/coder/coder/codersdk"
-	"github.com/coder/coder/codersdk/agentsdk"
-	"github.com/coder/coder/cryptorand"
-	"github.com/coder/coder/provisioner/echo"
-	"github.com/coder/coder/provisionerd"
-	provisionerdproto "github.com/coder/coder/provisionerd/proto"
-	"github.com/coder/coder/provisionersdk"
-	sdkproto "github.com/coder/coder/provisionersdk/proto"
-	"github.com/coder/coder/tailnet"
-	"github.com/coder/coder/testutil"
+	"github.com/coder/coder/v2/coderd"
+	"github.com/coder/coder/v2/coderd/audit"
+	"github.com/coder/coder/v2/coderd/autobuild"
+	"github.com/coder/coder/v2/coderd/awsidentity"
+	"github.com/coder/coder/v2/coderd/batchstats"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbauthz"
+	"github.com/coder/coder/v2/coderd/database/dbtestutil"
+	"github.com/coder/coder/v2/coderd/database/pubsub"
+	"github.com/coder/coder/v2/coderd/gitauth"
+	"github.com/coder/coder/v2/coderd/gitsshkey"
+	"github.com/coder/coder/v2/coderd/healthcheck"
+	"github.com/coder/coder/v2/coderd/httpapi"
+	"github.com/coder/coder/v2/coderd/httpmw"
+	"github.com/coder/coder/v2/coderd/rbac"
+	"github.com/coder/coder/v2/coderd/schedule"
+	"github.com/coder/coder/v2/coderd/telemetry"
+	"github.com/coder/coder/v2/coderd/unhanger"
+	"github.com/coder/coder/v2/coderd/updatecheck"
+	"github.com/coder/coder/v2/coderd/util/ptr"
+	"github.com/coder/coder/v2/coderd/workspaceapps"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/codersdk/agentsdk"
+	"github.com/coder/coder/v2/cryptorand"
+	"github.com/coder/coder/v2/provisioner/echo"
+	"github.com/coder/coder/v2/provisionerd"
+	provisionerdproto "github.com/coder/coder/v2/provisionerd/proto"
+	"github.com/coder/coder/v2/provisionersdk"
+	sdkproto "github.com/coder/coder/v2/provisionersdk/proto"
+	"github.com/coder/coder/v2/tailnet"
+	"github.com/coder/coder/v2/testutil"
 )
 
 // AppSecurityKey is a 96-byte key used to sign JWTs and encrypt JWEs for
@@ -140,7 +139,10 @@ type Options struct {
 	SwaggerEndpoint bool
 	// Logger should only be overridden if you expect errors
 	// as part of your test.
-	Logger *slog.Logger
+	Logger       *slog.Logger
+	StatsBatcher *batchstats.Batcher
+
+	WorkspaceAppsStatsCollectorOptions workspaceapps.StatsCollectorOptions
 }
 
 // New constructs a codersdk client connected to an in-memory API instance.
@@ -241,6 +243,18 @@ func NewOptions(t testing.TB, options *Options) (func(http.Handler), context.Can
 	if options.FilesRateLimit == 0 {
 		options.FilesRateLimit = -1
 	}
+	if options.StatsBatcher == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		batcher, closeBatcher, err := batchstats.New(ctx,
+			batchstats.WithStore(options.Database),
+			// Avoid cluttering up test output.
+			batchstats.WithLogger(slog.Make(sloghuman.Sink(io.Discard))),
+		)
+		require.NoError(t, err, "create stats batcher")
+		options.StatsBatcher = batcher
+		t.Cleanup(closeBatcher)
+	}
 
 	var templateScheduleStore atomic.Pointer[schedule.TemplateScheduleStore]
 	if options.TemplateScheduleStore == nil {
@@ -252,6 +266,7 @@ func NewOptions(t testing.TB, options *Options) (func(http.Handler), context.Can
 	lifecycleExecutor := autobuild.NewExecutor(
 		ctx,
 		options.Database,
+		options.Pubsub,
 		&templateScheduleStore,
 		slogtest.Make(t, nil).Named("autobuild.executor").Leveled(slog.LevelDebug),
 		options.AutobuildTicker,
@@ -309,13 +324,13 @@ func NewOptions(t testing.TB, options *Options) (func(http.Handler), context.Can
 		stunAddresses   []string
 		dvStunAddresses = options.DeploymentValues.DERP.Server.STUNAddresses.Value()
 	)
-	if len(dvStunAddresses) == 0 || (len(dvStunAddresses) == 1 && dvStunAddresses[0] == "stun.l.google.com:19302") {
+	if len(dvStunAddresses) == 0 || dvStunAddresses[0] == "stun.l.google.com:19302" {
 		stunAddr, stunCleanup := stuntest.ServeWithPacketListener(t, nettype.Std{})
 		stunAddr.IP = net.ParseIP("127.0.0.1")
 		t.Cleanup(stunCleanup)
 		stunAddresses = []string{stunAddr.String()}
 		options.DeploymentValues.DERP.Server.STUNAddresses = stunAddresses
-	} else if dvStunAddresses[0] != "disable" {
+	} else if dvStunAddresses[0] != tailnet.DisableSTUN {
 		stunAddresses = options.DeploymentValues.DERP.Server.STUNAddresses.Value()
 	}
 
@@ -379,36 +394,38 @@ func NewOptions(t testing.TB, options *Options) (func(http.Handler), context.Can
 			Pubsub:                         options.Pubsub,
 			GitAuthConfigs:                 options.GitAuthConfigs,
 
-			Auditor:                     options.Auditor,
-			AWSCertificates:             options.AWSCertificates,
-			AzureCertificates:           options.AzureCertificates,
-			GithubOAuth2Config:          options.GithubOAuth2Config,
-			RealIPConfig:                options.RealIPConfig,
-			OIDCConfig:                  options.OIDCConfig,
-			GoogleTokenValidator:        options.GoogleTokenValidator,
-			SSHKeygenAlgorithm:          options.SSHKeygenAlgorithm,
-			DERPServer:                  derpServer,
-			APIRateLimit:                options.APIRateLimit,
-			LoginRateLimit:              options.LoginRateLimit,
-			FilesRateLimit:              options.FilesRateLimit,
-			Authorizer:                  options.Authorizer,
-			Telemetry:                   telemetry.NewNoop(),
-			TemplateScheduleStore:       &templateScheduleStore,
-			TLSCertificates:             options.TLSCertificates,
-			TrialGenerator:              options.TrialGenerator,
-			TailnetCoordinator:          options.Coordinator,
-			BaseDERPMap:                 derpMap,
-			DERPMapUpdateFrequency:      150 * time.Millisecond,
-			MetricsCacheRefreshInterval: options.MetricsCacheRefreshInterval,
-			AgentStatsRefreshInterval:   options.AgentStatsRefreshInterval,
-			DeploymentValues:            options.DeploymentValues,
-			UpdateCheckOptions:          options.UpdateCheckOptions,
-			SwaggerEndpoint:             options.SwaggerEndpoint,
-			AppSecurityKey:              AppSecurityKey,
-			SSHConfig:                   options.ConfigSSH,
-			HealthcheckFunc:             options.HealthcheckFunc,
-			HealthcheckTimeout:          options.HealthcheckTimeout,
-			HealthcheckRefresh:          options.HealthcheckRefresh,
+			Auditor:                            options.Auditor,
+			AWSCertificates:                    options.AWSCertificates,
+			AzureCertificates:                  options.AzureCertificates,
+			GithubOAuth2Config:                 options.GithubOAuth2Config,
+			RealIPConfig:                       options.RealIPConfig,
+			OIDCConfig:                         options.OIDCConfig,
+			GoogleTokenValidator:               options.GoogleTokenValidator,
+			SSHKeygenAlgorithm:                 options.SSHKeygenAlgorithm,
+			DERPServer:                         derpServer,
+			APIRateLimit:                       options.APIRateLimit,
+			LoginRateLimit:                     options.LoginRateLimit,
+			FilesRateLimit:                     options.FilesRateLimit,
+			Authorizer:                         options.Authorizer,
+			Telemetry:                          telemetry.NewNoop(),
+			TemplateScheduleStore:              &templateScheduleStore,
+			TLSCertificates:                    options.TLSCertificates,
+			TrialGenerator:                     options.TrialGenerator,
+			TailnetCoordinator:                 options.Coordinator,
+			BaseDERPMap:                        derpMap,
+			DERPMapUpdateFrequency:             150 * time.Millisecond,
+			MetricsCacheRefreshInterval:        options.MetricsCacheRefreshInterval,
+			AgentStatsRefreshInterval:          options.AgentStatsRefreshInterval,
+			DeploymentValues:                   options.DeploymentValues,
+			UpdateCheckOptions:                 options.UpdateCheckOptions,
+			SwaggerEndpoint:                    options.SwaggerEndpoint,
+			AppSecurityKey:                     AppSecurityKey,
+			SSHConfig:                          options.ConfigSSH,
+			HealthcheckFunc:                    options.HealthcheckFunc,
+			HealthcheckTimeout:                 options.HealthcheckTimeout,
+			HealthcheckRefresh:                 options.HealthcheckRefresh,
+			StatsBatcher:                       options.StatsBatcher,
+			WorkspaceAppsStatsCollectorOptions: options.WorkspaceAppsStatsCollectorOptions,
 		}
 }
 
@@ -437,11 +454,41 @@ func NewWithAPI(t testing.TB, options *Options) (*codersdk.Client, io.Closer, *c
 	return client, provisionerCloser, coderAPI
 }
 
+// provisionerdCloser wraps a provisioner daemon as an io.Closer that can be called multiple times
+type provisionerdCloser struct {
+	mu     sync.Mutex
+	closed bool
+	d      *provisionerd.Server
+}
+
+func (c *provisionerdCloser) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil
+	}
+	c.closed = true
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitShort)
+	defer cancel()
+	shutdownErr := c.d.Shutdown(ctx)
+	closeErr := c.d.Close()
+	if shutdownErr != nil {
+		return shutdownErr
+	}
+	return closeErr
+}
+
 // NewProvisionerDaemon launches a provisionerd instance configured to work
 // well with coderd testing. It registers the "echo" provisioner for
 // quick testing.
 func NewProvisionerDaemon(t testing.TB, coderAPI *coderd.API) io.Closer {
 	t.Helper()
+
+	// t.Cleanup runs in last added, first called order. t.TempDir() will delete
+	// the directory on cleanup, so we want to make sure the echoServer is closed
+	// before we go ahead an attempt to delete it's work directory.
+	// seems t.TempDir() is not safe to call from a different goroutine
+	workDir := t.TempDir()
 
 	echoClient, echoServer := provisionersdk.MemTransportPipe()
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -450,27 +497,27 @@ func NewProvisionerDaemon(t testing.TB, coderAPI *coderd.API) io.Closer {
 		_ = echoServer.Close()
 		cancelFunc()
 	})
-	fs := afero.NewMemMapFs()
+
 	go func() {
-		err := echo.Serve(ctx, fs, &provisionersdk.ServeOptions{
-			Listener: echoServer,
+		err := echo.Serve(ctx, &provisionersdk.ServeOptions{
+			Listener:      echoServer,
+			WorkDirectory: workDir,
+			Logger:        coderAPI.Logger.Named("echo").Leveled(slog.LevelDebug),
 		})
 		assert.NoError(t, err)
 	}()
 
-	closer := provisionerd.New(func(ctx context.Context) (provisionerdproto.DRPCProvisionerDaemonClient, error) {
-		return coderAPI.CreateInMemoryProvisionerDaemon(ctx, 0)
+	daemon := provisionerd.New(func(ctx context.Context) (provisionerdproto.DRPCProvisionerDaemonClient, error) {
+		return coderAPI.CreateInMemoryProvisionerDaemon(ctx)
 	}, &provisionerd.Options{
-		Filesystem:          fs,
 		Logger:              coderAPI.Logger.Named("provisionerd").Leveled(slog.LevelDebug),
-		JobPollInterval:     50 * time.Millisecond,
 		UpdateInterval:      250 * time.Millisecond,
 		ForceCancelInterval: time.Second,
-		Provisioners: provisionerd.Provisioners{
+		Connector: provisionerd.LocalProvisioners{
 			string(database.ProvisionerTypeEcho): sdkproto.NewDRPCProvisionerClient(echoClient),
 		},
-		WorkDirectory: t.TempDir(),
 	})
+	closer := &provisionerdCloser{d: daemon}
 	t.Cleanup(func() {
 		_ = closer.Close()
 	})
@@ -487,28 +534,30 @@ func NewExternalProvisionerDaemon(t *testing.T, client *codersdk.Client, org uui
 		cancelFunc()
 		<-serveDone
 	})
-	fs := afero.NewMemMapFs()
 	go func() {
 		defer close(serveDone)
-		err := echo.Serve(ctx, fs, &provisionersdk.ServeOptions{
-			Listener: echoServer,
+		err := echo.Serve(ctx, &provisionersdk.ServeOptions{
+			Listener:      echoServer,
+			WorkDirectory: t.TempDir(),
 		})
 		assert.NoError(t, err)
 	}()
 
-	closer := provisionerd.New(func(ctx context.Context) (provisionerdproto.DRPCProvisionerDaemonClient, error) {
-		return client.ServeProvisionerDaemon(ctx, org, []codersdk.ProvisionerType{codersdk.ProvisionerTypeEcho}, tags)
+	daemon := provisionerd.New(func(ctx context.Context) (provisionerdproto.DRPCProvisionerDaemonClient, error) {
+		return client.ServeProvisionerDaemon(ctx, codersdk.ServeProvisionerDaemonRequest{
+			Organization: org,
+			Provisioners: []codersdk.ProvisionerType{codersdk.ProvisionerTypeEcho},
+			Tags:         tags,
+		})
 	}, &provisionerd.Options{
-		Filesystem:          fs,
 		Logger:              slogtest.Make(t, nil).Named("provisionerd").Leveled(slog.LevelDebug),
-		JobPollInterval:     50 * time.Millisecond,
 		UpdateInterval:      250 * time.Millisecond,
 		ForceCancelInterval: time.Second,
-		Provisioners: provisionerd.Provisioners{
+		Connector: provisionerd.LocalProvisioners{
 			string(database.ProvisionerTypeEcho): sdkproto.NewDRPCProvisionerClient(echoClient),
 		},
-		WorkDirectory: t.TempDir(),
 	})
+	closer := &provisionerdCloser{d: daemon}
 	t.Cleanup(func() {
 		_ = closer.Close()
 	})
@@ -568,14 +617,7 @@ func createAnotherUserRetry(t *testing.T, client *codersdk.Client, organizationI
 	require.NoError(t, err)
 
 	var sessionToken string
-	if !req.DisableLogin {
-		login, err := client.LoginWithPassword(context.Background(), codersdk.LoginWithPasswordRequest{
-			Email:    req.Email,
-			Password: req.Password,
-		})
-		require.NoError(t, err)
-		sessionToken = login.SessionToken
-	} else {
+	if req.DisableLogin || req.UserLoginType == codersdk.LoginTypeNone {
 		// Cannot log in with a disabled login user. So make it an api key from
 		// the client making this user.
 		token, err := client.CreateToken(context.Background(), user.ID.String(), codersdk.CreateTokenRequest{
@@ -585,6 +627,13 @@ func createAnotherUserRetry(t *testing.T, client *codersdk.Client, organizationI
 		})
 		require.NoError(t, err)
 		sessionToken = token.Key
+	} else {
+		login, err := client.LoginWithPassword(context.Background(), codersdk.LoginWithPasswordRequest{
+			Email:    req.Email,
+			Password: req.Password,
+		})
+		require.NoError(t, err)
+		sessionToken = login.SessionToken
 	}
 
 	if user.Status == codersdk.UserStatusDormant {
@@ -714,7 +763,7 @@ func UpdateTemplateVersion(t *testing.T, client *codersdk.Client, organizationID
 func AwaitTemplateVersionJob(t *testing.T, client *codersdk.Client, version uuid.UUID) codersdk.TemplateVersion {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitMedium)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitLong)
 	defer cancel()
 
 	t.Logf("waiting for template version job %s", version)
@@ -723,7 +772,7 @@ func AwaitTemplateVersionJob(t *testing.T, client *codersdk.Client, version uuid
 		var err error
 		templateVersion, err = client.TemplateVersion(ctx, version)
 		return assert.NoError(t, err) && templateVersion.Job.CompletedAt != nil
-	}, testutil.WaitMedium, testutil.IntervalFast)
+	}, testutil.WaitLong, testutil.IntervalMedium)
 	t.Logf("got template version job %s", version)
 	return templateVersion
 }
@@ -741,7 +790,7 @@ func AwaitWorkspaceBuildJob(t *testing.T, client *codersdk.Client, build uuid.UU
 		var err error
 		workspaceBuild, err = client.WorkspaceBuild(ctx, build)
 		return assert.NoError(t, err) && workspaceBuild.Job.CompletedAt != nil
-	}, testutil.WaitShort, testutil.IntervalFast)
+	}, testutil.WaitMedium, testutil.IntervalMedium)
 	t.Logf("got workspace build job %s", build)
 	return workspaceBuild
 }
@@ -749,7 +798,7 @@ func AwaitWorkspaceBuildJob(t *testing.T, client *codersdk.Client, build uuid.UU
 // AwaitWorkspaceAgents waits for all resources with agents to be connected. If
 // specific agents are provided, it will wait for those agents to be connected
 // but will not fail if other agents are not connected.
-func AwaitWorkspaceAgents(t *testing.T, client *codersdk.Client, workspaceID uuid.UUID, agentNames ...string) []codersdk.WorkspaceResource {
+func AwaitWorkspaceAgents(t testing.TB, client *codersdk.Client, workspaceID uuid.UUID, agentNames ...string) []codersdk.WorkspaceResource {
 	t.Helper()
 
 	agentNamesMap := make(map[string]struct{}, len(agentNames))
@@ -789,7 +838,7 @@ func AwaitWorkspaceAgents(t *testing.T, client *codersdk.Client, workspaceID uui
 		resources = workspace.LatestBuild.Resources
 
 		return true
-	}, testutil.WaitLong, testutil.IntervalFast)
+	}, testutil.WaitLong, testutil.IntervalMedium)
 	t.Logf("got workspace agents (workspace %s)", workspaceID)
 	return resources
 }
@@ -999,105 +1048,6 @@ func NewAWSInstanceIdentity(t *testing.T, instanceID string) (awsidentity.Certif
 		}
 }
 
-type OIDCConfig struct {
-	key    *rsa.PrivateKey
-	issuer string
-}
-
-func NewOIDCConfig(t *testing.T, issuer string) *OIDCConfig {
-	t.Helper()
-
-	block, _ := pem.Decode([]byte(testRSAPrivateKey))
-	pkey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	require.NoError(t, err)
-
-	if issuer == "" {
-		issuer = "https://coder.com"
-	}
-
-	return &OIDCConfig{
-		key:    pkey,
-		issuer: issuer,
-	}
-}
-
-func (*OIDCConfig) AuthCodeURL(state string, _ ...oauth2.AuthCodeOption) string {
-	return "/?state=" + url.QueryEscape(state)
-}
-
-func (*OIDCConfig) TokenSource(context.Context, *oauth2.Token) oauth2.TokenSource {
-	return nil
-}
-
-func (*OIDCConfig) Exchange(_ context.Context, code string, _ ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
-	token, err := base64.StdEncoding.DecodeString(code)
-	if err != nil {
-		return nil, xerrors.Errorf("decode code: %w", err)
-	}
-	return (&oauth2.Token{
-		AccessToken: "token",
-	}).WithExtra(map[string]interface{}{
-		"id_token": string(token),
-	}), nil
-}
-
-func (o *OIDCConfig) EncodeClaims(t *testing.T, claims jwt.MapClaims) string {
-	t.Helper()
-
-	if _, ok := claims["exp"]; !ok {
-		claims["exp"] = time.Now().Add(time.Hour).UnixMilli()
-	}
-
-	if _, ok := claims["iss"]; !ok {
-		claims["iss"] = o.issuer
-	}
-
-	if _, ok := claims["sub"]; !ok {
-		claims["sub"] = "testme"
-	}
-
-	signed, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(o.key)
-	require.NoError(t, err)
-
-	return base64.StdEncoding.EncodeToString([]byte(signed))
-}
-
-func (o *OIDCConfig) OIDCConfig(t *testing.T, userInfoClaims jwt.MapClaims, opts ...func(cfg *coderd.OIDCConfig)) *coderd.OIDCConfig {
-	// By default, the provider can be empty.
-	// This means it won't support any endpoints!
-	provider := &oidc.Provider{}
-	if userInfoClaims != nil {
-		resp, err := json.Marshal(userInfoClaims)
-		require.NoError(t, err)
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(resp)
-		}))
-		t.Cleanup(srv.Close)
-		cfg := &oidc.ProviderConfig{
-			UserInfoURL: srv.URL,
-		}
-		provider = cfg.NewProvider(context.Background())
-	}
-	cfg := &coderd.OIDCConfig{
-		OAuth2Config: o,
-		Verifier: oidc.NewVerifier(o.issuer, &oidc.StaticKeySet{
-			PublicKeys: []crypto.PublicKey{o.key.Public()},
-		}, &oidc.Config{
-			SkipClientIDCheck: true,
-		}),
-		Provider:      provider,
-		UsernameField: "preferred_username",
-		EmailField:    "email",
-		AuthURLParams: map[string]string{"access_type": "offline"},
-		GroupField:    "groups",
-	}
-	for _, opt := range opts {
-		opt(cfg)
-	}
-	return cfg
-}
-
 // NewAzureInstanceIdentity returns a metadata client and ID token validator for faking
 // instance authentication for Azure.
 func NewAzureInstanceIdentity(t *testing.T, instanceID string) (x509.VerifyOptions, *http.Client) {
@@ -1185,22 +1135,6 @@ func SDKError(t *testing.T, err error) *codersdk.Error {
 	require.True(t, errors.As(err, &cerr))
 	return cerr
 }
-
-const testRSAPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
-MIICXQIBAAKBgQDLets8+7M+iAQAqN/5BVyCIjhTQ4cmXulL+gm3v0oGMWzLupUS
-v8KPA+Tp7dgC/DZPfMLaNH1obBBhJ9DhS6RdS3AS3kzeFrdu8zFHLWF53DUBhS92
-5dCAEuJpDnNizdEhxTfoHrhuCmz8l2nt1pe5eUK2XWgd08Uc93h5ij098wIDAQAB
-AoGAHLaZeWGLSaen6O/rqxg2laZ+jEFbMO7zvOTruiIkL/uJfrY1kw+8RLIn+1q0
-wLcWcuEIHgKKL9IP/aXAtAoYh1FBvRPLkovF1NZB0Je/+CSGka6wvc3TGdvppZJe
-rKNcUvuOYLxkmLy4g9zuY5qrxFyhtIn2qZzXEtLaVOHzPQECQQDvN0mSajpU7dTB
-w4jwx7IRXGSSx65c+AsHSc1Rj++9qtPC6WsFgAfFN2CEmqhMbEUVGPv/aPjdyWk9
-pyLE9xR/AkEA2cGwyIunijE5v2rlZAD7C4vRgdcMyCf3uuPcgzFtsR6ZhyQSgLZ8
-YRPuvwm4cdPJMmO3YwBfxT6XGuSc2k8MjQJBAI0+b8prvpV2+DCQa8L/pjxp+VhR
-Xrq2GozrHrgR7NRokTB88hwFRJFF6U9iogy9wOx8HA7qxEbwLZuhm/4AhbECQC2a
-d8h4Ht09E+f3nhTEc87mODkl7WJZpHL6V2sORfeq/eIkds+H6CJ4hy5w/bSw8tjf
-sz9Di8sGIaUbLZI2rd0CQQCzlVwEtRtoNCyMJTTrkgUuNufLP19RZ5FpyXxBO5/u
-QastnN77KfUwdj3SJt44U/uh1jAIv4oSLBr8HYUkbnI8
------END RSA PRIVATE KEY-----`
 
 func DeploymentValues(t testing.TB) *codersdk.DeploymentValues {
 	var cfg codersdk.DeploymentValues

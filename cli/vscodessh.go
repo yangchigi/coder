@@ -20,8 +20,8 @@ import (
 	"cdr.dev/slog"
 	"cdr.dev/slog/sloggers/sloghuman"
 
-	"github.com/coder/coder/cli/clibase"
-	"github.com/coder/coder/codersdk"
+	"github.com/coder/coder/v2/cli/clibase"
+	"github.com/coder/coder/v2/codersdk"
 )
 
 // vscodeSSH is used by the Coder VS Code extension to establish
@@ -40,9 +40,9 @@ func (r *RootCmd) vscodeSSH() *clibase.Cmd {
 	cmd := &clibase.Cmd{
 		// A SSH config entry is added by the VS Code extension that
 		// passes %h to ProxyCommand. The prefix of `coder-vscode--`
-		// is a magical string represented in our VS Cod extension.
+		// is a magical string represented in our VS Code extension.
 		// It's not important here, only the delimiter `--` is.
-		Use:        "vscodessh <coder-vscode--<owner>-<workspace>-<agent?>>",
+		Use:        "vscodessh <coder-vscode--<owner>--<workspace>--<agent?>>",
 		Hidden:     true,
 		Middleware: clibase.RequireNArgs(1),
 		Handler: func(inv *clibase.Invocation) error {
@@ -86,14 +86,14 @@ func (r *RootCmd) vscodeSSH() *clibase.Cmd {
 			client.SetSessionToken(string(sessionToken))
 
 			// This adds custom headers to the request!
-			err = r.setClient(client, serverURL)
+			err = r.setClient(ctx, client, serverURL)
 			if err != nil {
 				return xerrors.Errorf("set client: %w", err)
 			}
 
 			parts := strings.Split(inv.Args[0], "--")
 			if len(parts) < 3 {
-				return xerrors.Errorf("invalid argument format. must be: coder-vscode--<owner>-<name>-<agent?>")
+				return xerrors.Errorf("invalid argument format. must be: coder-vscode--<owner>--<name>--<agent?>")
 			}
 			owner := parts[1]
 			name := parts[2]

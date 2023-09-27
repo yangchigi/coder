@@ -64,10 +64,19 @@ site/stats/
 ./scaletest/terraform/.terraform.lock.hcl
 scaletest/terraform/secrets.tfvars
 .terraform.tfstate.*
+
+# Nix
+result
+
+# Data dumps from unit tests
+**/*.test.sql
+
+# Filebrowser.db
+**/filebrowser.db
 # .prettierignore.include:
 # Helm templates contain variables that are invalid YAML and can't be formatted
 # by Prettier.
-helm/templates/*.yaml
+helm/**/templates/*.yaml
 
 # Terraform state files used in tests, these are automatically generated.
 # Example: provisioner/terraform/testdata/instance-id/instance-id.tfstate.json
@@ -80,3 +89,6 @@ scripts/apitypings/testdata/**/*.ts
 site/e2e/provisionerGenerated.ts
 
 **/pnpm-lock.yaml
+
+# Ignore generated JSON (e.g. examples/examples.gen.json).
+**/*.gen.json

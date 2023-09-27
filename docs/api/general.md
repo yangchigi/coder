@@ -168,6 +168,7 @@ curl -X GET http://coder-server:8080/api/v2/deployment/config \
     "derp": {
       "config": {
         "block_direct": true,
+        "force_websockets": true,
         "path": "string",
         "url": "string"
       },
@@ -211,6 +212,7 @@ curl -X GET http://coder-server:8080/api/v2/deployment/config \
     },
     "enable_terraform_debug_mode": true,
     "experiments": ["string"],
+    "external_token_encryption_keys": ["string"],
     "git_auth": {
       "value": [
         {
@@ -256,11 +258,15 @@ curl -X GET http://coder-server:8080/api/v2/deployment/config \
     "oidc": {
       "allow_signups": true,
       "auth_url_params": {},
+      "client_cert_file": "string",
       "client_id": "string",
+      "client_key_file": "string",
       "client_secret": "string",
       "email_domain": ["string"],
       "email_field": "string",
+      "group_auto_create": true,
       "group_mapping": {},
+      "group_regex_filter": {},
       "groups_field": "string",
       "icon_url": {
         "forceQuery": true,
@@ -305,6 +311,7 @@ curl -X GET http://coder-server:8080/api/v2/deployment/config \
     "provisioner": {
       "daemon_poll_interval": 0,
       "daemon_poll_jitter": 0,
+      "daemon_psk": "string",
       "daemons": 0,
       "daemons_echo": true,
       "force_cancel_interval": 0
@@ -370,6 +377,7 @@ curl -X GET http://coder-server:8080/api/v2/deployment/config \
     },
     "trace": {
       "capture_logs": true,
+      "data_dog": true,
       "enable": true,
       "honeycomb_api_key": "string"
     },
