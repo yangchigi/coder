@@ -9,9 +9,8 @@ import (
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
-	"golang.org/x/xerrors"
-
 	"github.com/chromedp/chromedp"
+	"golang.org/x/xerrors"
 )
 
 // Action is just a function that does something.
@@ -65,7 +64,7 @@ func ClickRandomElement(ctx context.Context) (Label, Action, error) {
 	}
 
 	return "click_" + matchedLabel, func(ctx context.Context) error {
-		if err := click(ctx, matched); err != nil {
+		if err := clickAndWait(ctx, matched); err != nil {
 			return xerrors.Errorf("click %q: %w", matched, err)
 		}
 		return nil
@@ -89,10 +88,20 @@ func randMatch(ctx context.Context, s Selector) (Selector, bool, error) {
 	return Selector(n.FullXPath()), true, nil
 }
 
-// TODO: this should wait after the click to ensure the page has loaded
-// so that we can measure durations properly.
-func click(ctx context.Context, s Selector) error {
-	return chromedp.Run(ctx, chromedp.Click(s, chromedp.NodeVisible))
+// clickAndWait clicks the given selector and waits for the page to finish loading.
+// The page is considered loaded when the network event "LoadingFinished" is received.
+func clickAndWait(ctx context.Context, s Selector) error {
+	return chromedp.Run(ctx, chromedp.Tasks{
+		chromedp.Click(s, chromedp.NodeVisible),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return waitForEvent(ctx, func(e interface{}) bool {
+				if _, ok := e.(*network.EventLoadingFinished); ok {
+					return true
+				}
+				return false
+			})
+		}),
+	})
 }
 
 // initChromeDPCtx initializes a chromedp context with the given session token cookie
@@ -146,6 +155,26 @@ func setSessionTokenCookie(ctx context.Context, token, domain string) error {
 		return xerrors.Errorf("set coder_session_token cookie: %w", err)
 	}
 	return nil
+}
+
+// waitForEvent waits for a lifecycle event that matches the given function.
+// Adapted from https://github.com/chromedp/chromedp/issues/431
+func waitForEvent(ctx context.Context, matcher func(e interface{}) bool) error {
+	ch := make(chan struct{})
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	chromedp.ListenTarget(cctx, func(evt interface{}) {
+		if matcher(evt) {
+			cancel()
+			close(ch)
+		}
+	})
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func visitMainPage(ctx context.Context, u *url.URL) error {
