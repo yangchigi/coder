@@ -7,17 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"cdr.dev/slog/sloggers/slogtest"
 	"github.com/coder/coder/v2/coderd/coderdtest"
 	"github.com/coder/coder/v2/scaletest/dashboard"
 	"github.com/coder/coder/v2/testutil"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func Test_Run(t *testing.T) {
 	t.Parallel()
-	t.Skip("To be fixed by https://github.com/coder/coder/issues/9131")
 	if testutil.RaceEnabled() {
 		t.Skip("skipping timing-sensitive test because of race detector")
 	}

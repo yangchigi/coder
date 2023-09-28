@@ -1,8 +1,9 @@
 package dashboard
 
 import (
-	"cdr.dev/slog"
 	"time"
+
+	"cdr.dev/slog"
 
 	"golang.org/x/xerrors"
 )

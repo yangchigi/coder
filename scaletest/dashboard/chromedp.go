@@ -2,12 +2,14 @@ package dashboard
 
 import (
 	"context"
-	"github.com/chromedp/cdproto/cdp"
-	"github.com/chromedp/cdproto/network"
-	"golang.org/x/xerrors"
+	"math/rand"
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/network"
+	"golang.org/x/xerrors"
 
 	"github.com/chromedp/chromedp"
 )
@@ -34,9 +36,12 @@ func selectors(kvs ...string) map[label]selector {
 	return m
 }
 
+// TODO: this needs to wait until the page is loaded
+// clickRandElement clicks a random element from the given selectors.
+// If no elements are found, an error is returned.
+// If more than one element is found, one is chosen at random.
+// The label of the clicked element is returned.
 func clickRandElement(ctx context.Context, sels map[label]selector) (label, error) {
-	// iterate through selectors at random
-	// and pick one that matches at random
 	var matched selector
 	var matchedLabel label
 	var found bool
@@ -73,25 +78,20 @@ func randMatch(ctx context.Context, s selector) (selector, bool, error) {
 	if err != nil {
 		return "", false, xerrors.Errorf("get nodes for selector %q: %w", s, err)
 	}
-	if nodes == nil || len(nodes) == 0 {
+	if len(nodes) == 0 {
 		return "", false, nil
 	}
-	nodeMap := make(map[*cdp.Node]struct{})
-	for _, n := range nodes {
-		nodeMap[n] = struct{}{}
-	}
-	// Take the first element from the map; this will be a random
-	// element from the slice of nodes.
-	for n := range nodeMap {
-		return selector(n.FullXPath()), true, nil
-	}
-	return "", false, xerrors.Errorf("unreachable")
+	n := pick(nodes)
+	return selector(n.FullXPath()), true, nil
 }
 
 func click(ctx context.Context, s selector) error {
 	return chromedp.Run(ctx, chromedp.Click(s, chromedp.NodeVisible))
 }
 
+// initChromeDPCtx initializes a chromedp context with the given session token cookie
+//
+//nolint:revive // yes, headless is a control flag
 func initChromeDPCtx(ctx context.Context, u *url.URL, sessionToken string, headless bool) (context.Context, context.CancelFunc, error) {
 	dir, err := os.MkdirTemp("", "scaletest-dashboard")
 	if err != nil {
@@ -144,4 +144,14 @@ func setSessionTokenCookie(ctx context.Context, token, domain string) error {
 
 func visitMainPage(ctx context.Context, u *url.URL) error {
 	return chromedp.Run(ctx, chromedp.Navigate(u.String()))
+}
+
+// pick returns a random element from the given slice.
+// Panics if the slice is empty.
+func pick[T any](ts []T) T {
+	if len(ts) == 0 {
+		panic("cannot pick from empty slice")
+	}
+	//nolint:gosec // not used for cryptographic purposes
+	return ts[rand.Intn(len(ts))]
 }
