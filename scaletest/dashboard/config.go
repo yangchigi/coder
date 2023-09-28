@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"time"
 
 	"cdr.dev/slog"
@@ -19,6 +20,8 @@ type Config struct {
 	Logger slog.Logger `json:"-"`
 	// Headless controls headless mode for chromedp.
 	Headless bool `json:"no_headless"`
+	// ActionFunc is a function that returns an action to run.
+	ActionFunc func(ctx context.Context) (Label, Action, error) `json:"-"`
 }
 
 func (c Config) Validate() error {
@@ -32,6 +35,10 @@ func (c Config) Validate() error {
 
 	if c.MinWait > c.MaxWait {
 		return xerrors.Errorf("validate duration_min: must be less than duration_max")
+	}
+
+	if c.ActionFunc == nil {
+		return xerrors.Errorf("validate action func: must not be nil")
 	}
 
 	return nil

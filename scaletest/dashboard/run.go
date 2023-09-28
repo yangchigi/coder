@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math/rand"
 	"time"
@@ -60,13 +59,20 @@ func (r *Runner) Run(ctx context.Context, _ string, _ io.Writer) error {
 			return nil
 		case <-t.C:
 			t.Reset(r.randWait())
-			l, err := clickRandElement(cdpCtx, defaultSelectors)
+			l, act, err := r.cfg.ActionFunc(cdpCtx)
 			if err != nil {
-				fmt.Printf("clicking element %q: %v\n", l, err)
-				r.cfg.Logger.Error(ctx, "clicking element", slog.F("label", l), slog.Error(err))
+				r.cfg.Logger.Error(ctx, "calling ActionFunc", slog.Error(err))
+				continue
+			}
+			start := time.Now()
+			err = act(cdpCtx)
+			elapsed := time.Since(start)
+			r.metrics.ObserveDuration(string(l), elapsed)
+			if err != nil {
+				r.metrics.IncErrors(string(l))
+				r.cfg.Logger.Error(ctx, "action failed", slog.F("label", l), slog.Error(err))
 			} else {
-				fmt.Printf("clicked element %q\n", l)
-				r.cfg.Logger.Info(ctx, "clicked element", slog.F("label", l))
+				r.cfg.Logger.Info(ctx, "action success", slog.F("label", l))
 			}
 		}
 	}

@@ -14,42 +14,45 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// this is a default set of selectors for the dashboard
-var defaultSelectors = selectors(
-	"workspaces_list", `a[href="/workspaces"]:not(.active)`,
-	"templates_list", `a[href="/templates"]:not(.active)`,
-	"users_list", `a[href^="/users"]:not(.active)`,
-	"deployment_status", `a[href="/deployment/general"]:not(.active)`,
-	"starter_templates", `a[href="/starter-templates"]`,
-	"table_element", `tr[role="button"]`,
-	"templates_table_header", `a[href^="/templates/"]:not([aria-current])`,
-)
+// Action is just a function that does something.
+type Action func(ctx context.Context) error
 
-type selector string
-type label string
+// Selector locates an element on a page.
+type Selector string
 
-func selectors(kvs ...string) map[label]selector {
-	m := make(map[label]selector)
-	for i := 0; i < len(kvs); i += 2 {
-		m[label(kvs[i])] = selector(kvs[i+1])
-	}
-	return m
+// Label identifies an action.
+type Label string
+
+// defaultSelectors is a map of labels to selectors.
+var defaultSelectors = map[Label]Selector{
+	"workspaces_list":            `nav a[href="/workspaces"]:not(.active)`,
+	"templates_list":             `nav a[href="/templates"]:not(.active)`,
+	"users_list":                 `nav a[href^="/users"]:not(.active)`,
+	"deployment_status":          `nav a[href="/deployment/general"]:not(.active)`,
+	"starter_templates":          `a[href="/starter-templates"]`,
+	"workspaces_table_row":       `tr[role="button"][data-testid^="workspace-"]`,
+	"workspace_builds_table_row": `tr[role="button"][data-testid^="build-"]`,
+	"templates_table_row":        `tr[role="button"][data-testid^="template-"]`,
+	"template_docs":              `a[href^="/templates/"][href$="/docs"]:not([aria-current])`,
+	"template_files":             `a[href^="/templates/"][href$="/files"]:not([aria-current])`,
+	"template_versions":          `a[href^="/templates/"][href$="/versions"]:not([aria-current])`,
+	"template_embed":             `a[href^="/templates/"][href$="/embed"]:not([aria-current])`,
+	"template_insights":          `a[href^="/templates/"][href$="/insights"]:not([aria-current])`,
 }
 
-// TODO: this needs to wait until the page is loaded
-// clickRandElement clicks a random element from the given selectors.
+// ClickRandomElement returns an action that will click an element from the given selectors at random.
 // If no elements are found, an error is returned.
 // If more than one element is found, one is chosen at random.
 // The label of the clicked element is returned.
-func clickRandElement(ctx context.Context, sels map[label]selector) (label, error) {
-	var matched selector
-	var matchedLabel label
+func ClickRandomElement(ctx context.Context) (Label, Action, error) {
+	var matched Selector
+	var matchedLabel Label
 	var found bool
 	var err error
-	for l, s := range sels {
+	for l, s := range defaultSelectors {
 		matched, found, err = randMatch(ctx, s)
 		if err != nil {
-			return "", xerrors.Errorf("find matches for %q: %w", s, err)
+			return "", nil, xerrors.Errorf("find matches for %q: %w", s, err)
 		}
 		if !found {
 			continue
@@ -58,21 +61,22 @@ func clickRandElement(ctx context.Context, sels map[label]selector) (label, erro
 		break
 	}
 	if !found {
-		return "", xerrors.Errorf("no matches found")
+		return "", nil, xerrors.Errorf("no matches found")
 	}
 
-	// click it
-	if err := click(ctx, matched); err != nil {
-		return "", xerrors.Errorf("click %q: %w", matched, err)
-	}
-	return matchedLabel, nil
+	return "click_" + matchedLabel, func(ctx context.Context) error {
+		if err := click(ctx, matched); err != nil {
+			return xerrors.Errorf("click %q: %w", matched, err)
+		}
+		return nil
+	}, nil
 }
 
 // randMatch returns a random match for the given selector.
 // The returned selector is the full XPath of the matched node.
 // If no matches are found, an error is returned.
 // If multiple matches are found, one is chosen at random.
-func randMatch(ctx context.Context, s selector) (selector, bool, error) {
+func randMatch(ctx context.Context, s Selector) (Selector, bool, error) {
 	var nodes []*cdp.Node
 	err := chromedp.Run(ctx, chromedp.Nodes(s, &nodes, chromedp.NodeVisible, chromedp.AtLeast(0)))
 	if err != nil {
@@ -82,10 +86,12 @@ func randMatch(ctx context.Context, s selector) (selector, bool, error) {
 		return "", false, nil
 	}
 	n := pick(nodes)
-	return selector(n.FullXPath()), true, nil
+	return Selector(n.FullXPath()), true, nil
 }
 
-func click(ctx context.Context, s selector) error {
+// TODO: this should wait after the click to ensure the page has loaded
+// so that we can measure durations properly.
+func click(ctx context.Context, s Selector) error {
 	return chromedp.Run(ctx, chromedp.Click(s, chromedp.NodeVisible))
 }
 

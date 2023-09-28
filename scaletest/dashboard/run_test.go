@@ -2,6 +2,7 @@ package dashboard_test
 
 import (
 	"context"
+	"math/rand"
 	"runtime"
 	"sync"
 	"testing"
@@ -25,6 +26,16 @@ func Test_Run(t *testing.T) {
 		t.Skip("skipping test on Windows")
 	}
 
+	successAction := func(_ context.Context) error {
+		<-time.After(testutil.IntervalFast)
+		return nil
+	}
+
+	failAction := func(_ context.Context) error {
+		<-time.After(testutil.IntervalMedium)
+		return assert.AnError
+	}
+
 	client := coderdtest.New(t, nil)
 	_ = coderdtest.CreateFirstUser(t, client)
 
@@ -33,9 +44,16 @@ func Test_Run(t *testing.T) {
 	})
 	m := &testMetrics{}
 	cfg := dashboard.Config{
-		MinWait: time.Millisecond,
-		MaxWait: 10 * time.Millisecond,
-		Logger:  log,
+		MinWait:  100 * time.Millisecond,
+		MaxWait:  500 * time.Millisecond,
+		Logger:   log,
+		Headless: true,
+		ActionFunc: func(ctx context.Context) (dashboard.Label, dashboard.Action, error) {
+			if rand.Intn(2) == 0 { //nolint:gosec // just for testing
+				return "fails", failAction, nil
+			}
+			return "succeeds", successAction, nil
+		},
 	}
 	r := dashboard.NewRunner(client, m, cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), testutil.WaitShort)
@@ -49,23 +67,14 @@ func Test_Run(t *testing.T) {
 	assert.True(t, ok)
 	require.NoError(t, err)
 
-	if assert.NotEmpty(t, m.ObservedDurations["succeeds"]) {
-		assert.NotZero(t, m.ObservedDurations["succeeds"][0])
+	for _, dur := range m.ObservedDurations["succeeds"] {
+		assert.NotZero(t, dur)
 	}
-
-	if assert.NotEmpty(t, m.ObservedDurations["fails"]) {
-		assert.NotZero(t, m.ObservedDurations["fails"][0])
-	}
-
-	if assert.NotEmpty(t, m.ObservedDurations["hangs"]) {
-		assert.GreaterOrEqual(t, m.ObservedDurations["hangs"][0], cfg.MaxWait.Seconds())
+	for _, dur := range m.ObservedDurations["fails"] {
+		assert.NotZero(t, dur)
 	}
 	assert.Zero(t, m.Errors["succeeds"])
 	assert.NotZero(t, m.Errors["fails"])
-	assert.NotZero(t, m.Errors["hangs"])
-	assert.NotEmpty(t, m.Statuses["succeeds"])
-	assert.NotEmpty(t, m.Statuses["fails"])
-	assert.NotEmpty(t, m.Statuses["hangs"])
 }
 
 type testMetrics struct {
