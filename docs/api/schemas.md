@@ -380,6 +380,28 @@
   "age": 0,
   "collected_at": "2019-08-24T14:15:22Z",
   "error": "string",
+  "key": "string",
+  "value": "string"
+}
+```
+
+### Properties
+
+| Name           | Type    | Required | Restrictions | Description                                                                                                                             |
+| -------------- | ------- | -------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `age`          | integer | false    |              | Age is the number of seconds since the metadata was collected. It is provided in addition to CollectedAt to protect against clock skew. |
+| `collected_at` | string  | false    |              |                                                                                                                                         |
+| `error`        | string  | false    |              |                                                                                                                                         |
+| `key`          | string  | false    |              |                                                                                                                                         |
+| `value`        | string  | false    |              |                                                                                                                                         |
+
+## agentsdk.PostMetadataRequestDeprecated
+
+```json
+{
+  "age": 0,
+  "collected_at": "2019-08-24T14:15:22Z",
+  "error": "string",
   "value": "string"
 }
 ```
