@@ -278,6 +278,7 @@ const (
 	BuildReasonAutolock   BuildReason = "autolock"
 	BuildReasonFailedstop BuildReason = "failedstop"
 	BuildReasonAutodelete BuildReason = "autodelete"
+	BuildReasonBump       BuildReason = "bump"
 )
 
 func (e *BuildReason) Scan(src interface{}) error {
@@ -322,7 +323,8 @@ func (e BuildReason) Valid() bool {
 		BuildReasonAutostop,
 		BuildReasonAutolock,
 		BuildReasonFailedstop,
-		BuildReasonAutodelete:
+		BuildReasonAutodelete,
+		BuildReasonBump:
 		return true
 	}
 	return false
@@ -336,6 +338,7 @@ func AllBuildReasonValues() []BuildReason {
 		BuildReasonAutolock,
 		BuildReasonFailedstop,
 		BuildReasonAutodelete,
+		BuildReasonBump,
 	}
 }
 
