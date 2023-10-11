@@ -948,6 +948,19 @@
           "path": "./security/0001_user_apikeys_invalidation.md"
         }
       ]
+    },
+    {
+      "title": "Reference",
+      "description": "Miscellaneous documentation",
+      "path": "./reference/index.md",
+      "icon_path": "./images/icons/plug.svg",
+      "children": [
+        {
+          "title": "Icons",
+          "description": "Coder includes a set of images for use in templates.",
+          "path": "./reference/icons.md"
+        }
+      ]
     }
   ]
 }
