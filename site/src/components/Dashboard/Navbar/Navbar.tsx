@@ -32,7 +32,9 @@ export const Navbar: FC = () => {
       canViewDeployment={canViewDeployment}
       canViewAllUsers={canViewAllUsers}
       proxyContextValue={
-        dashboard.experiments.includes("moons") ? proxyContextValue : undefined
+        dashboard.enabledExperiments.includes("moons")
+          ? proxyContextValue
+          : undefined
       }
     />
   );

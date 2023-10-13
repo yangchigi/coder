@@ -2775,6 +2775,22 @@ AuthorizationObject can represent a "set" of objects, such as: all workspaces in
 | `deployment_health_page`        |
 | `dashboard_theme`               |
 
+## codersdk.ExperimentsResponse
+
+```json
+{
+  "available": ["moons"],
+  "enabled": ["moons"]
+}
+```
+
+### Properties
+
+| Name        | Type                                                | Required | Restrictions | Description |
+| ----------- | --------------------------------------------------- | -------- | ------------ | ----------- |
+| `available` | array of [codersdk.Experiment](#codersdkexperiment) | false    |              |             |
+| `enabled`   | array of [codersdk.Experiment](#codersdkexperiment) | false    |              |             |
+
 ## codersdk.ExternalAuth
 
 ```json

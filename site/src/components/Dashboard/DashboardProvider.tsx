@@ -31,7 +31,8 @@ interface DashboardProviderValue {
   buildInfo: BuildInfoResponse;
   entitlements: Entitlements;
   appearance: Appearance;
-  experiments: Experiments;
+  enabledExperiments: Experiments;
+  availableExperiments: Experiments;
 }
 
 export const DashboardProviderContext = createContext<
@@ -86,7 +87,8 @@ export const DashboardProvider: FC<PropsWithChildren> = ({ children }) => {
       value={{
         buildInfo: buildInfoQuery.data,
         entitlements: entitlementsQuery.data,
-        experiments: experimentsQuery.data,
+        enabledExperiments: experimentsQuery.data.enabled,
+        availableExperiments: experimentsQuery.data.available,
         appearance: {
           config: configPreview ?? appearanceQuery.data,
           setPreview: setPreview,

@@ -15,11 +15,12 @@ import {
 import { FC } from "react";
 import { optionValue } from "./optionValue";
 import Box from "@mui/material/Box";
-import { ClibaseOption } from "api/typesGenerated";
+import { ClibaseOption, Experiments } from "api/typesGenerated";
 
 const OptionsTable: FC<{
   options: ClibaseOption[];
-}> = ({ options }) => {
+  availableExperiments?: Experiments | undefined;
+}> = ({ options, availableExperiments }) => {
   const styles = useStyles();
 
   if (options.length === 0) {

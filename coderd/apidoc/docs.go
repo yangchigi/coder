@@ -593,10 +593,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/codersdk.Experiment"
-                            }
+                            "$ref": "#/definitions/codersdk.ExperimentsResponse"
                         }
                     }
                 }
@@ -8240,6 +8237,23 @@ const docTemplate = `{
                 "ExperimentDeploymentHealthPage",
                 "ExperimentDashboardTheme"
             ]
+        },
+        "codersdk.ExperimentsResponse": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/codersdk.Experiment"
+                    }
+                },
+                "enabled": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/codersdk.Experiment"
+                    }
+                }
+            }
         },
         "codersdk.ExternalAuth": {
             "type": "object",

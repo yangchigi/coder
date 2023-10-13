@@ -86,7 +86,7 @@ export const ProxyContext = createContext<ProxyContextValue | undefined>(
  */
 export const ProxyProvider: FC<PropsWithChildren> = ({ children }) => {
   const dashboard = useDashboard();
-  const experimentEnabled = dashboard?.experiments.includes("moons");
+  const experimentEnabled = dashboard?.enabledExperiments.includes("moons");
 
   // Using a useState so the caller always has the latest user saved
   // proxy.

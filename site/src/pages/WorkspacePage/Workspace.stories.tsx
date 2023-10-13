@@ -25,7 +25,8 @@ const meta: Meta<typeof Workspace> = {
         value={{
           buildInfo: Mocks.MockBuildInfo,
           entitlements: Mocks.MockEntitlementsWithScheduling,
-          experiments: Mocks.MockExperiments,
+          enabledExperiments: Mocks.MockExperiments.enabled,
+          availableExperiments: Mocks.MockExperiments.available,
           appearance: MockedAppearance,
         }}
       >

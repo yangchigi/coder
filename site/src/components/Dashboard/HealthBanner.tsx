@@ -15,7 +15,7 @@ export const HealthBanner = () => {
   const hasHealthIssues = healthStatus && !healthStatus.data.healthy;
 
   if (
-    dashboard.experiments.includes("deployment_health_page") &&
+    dashboard.enabledExperiments.includes("deployment_health_page") &&
     hasHealthIssues
   ) {
     return (

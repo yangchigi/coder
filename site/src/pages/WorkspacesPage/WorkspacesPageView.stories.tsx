@@ -123,7 +123,8 @@ const meta: Meta<typeof WorkspacesPageView> = {
         value={{
           buildInfo: MockBuildInfo,
           entitlements: MockEntitlementsWithScheduling,
-          experiments: MockExperiments,
+          enabledExperiments: MockExperiments.enabled,
+          availableExperiments: MockExperiments.available,
           appearance: MockedAppearance,
         }}
       >

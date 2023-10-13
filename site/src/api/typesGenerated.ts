@@ -423,6 +423,12 @@ export interface Entitlements {
 // From codersdk/deployment.go
 export type Experiments = Experiment[];
 
+// From codersdk/deployment.go
+export interface ExperimentsResponse {
+  readonly enabled: Experiment[];
+  readonly available: Experiment[];
+}
+
 // From codersdk/externalauth.go
 export interface ExternalAuth {
   readonly authenticated: boolean;

@@ -317,7 +317,7 @@ const TerminalPage: FC<TerminalPageProps> = ({ renderer }) => {
           ref={xtermRef}
           data-testid="terminal"
         />
-        {dashboard.experiments.includes("moons") &&
+        {dashboard.enabledExperiments.includes("moons") &&
           selectedProxy &&
           latency && (
             <BottomBar proxy={selectedProxy} latency={latency.latencyMS} />

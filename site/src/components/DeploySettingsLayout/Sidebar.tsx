@@ -119,7 +119,7 @@ export const Sidebar: React.FC = () => {
       <SidebarNavItem href="network" icon={<SidebarNavItemIcon icon={Globe} />}>
         Network
       </SidebarNavItem>
-      {dashboard.experiments.includes("moons") && (
+      {dashboard.enabledExperiments.includes("moons") && (
         <SidebarNavItem
           href="workspace-proxies"
           icon={<SidebarNavItemIcon icon={HubOutlinedIcon} />}
@@ -133,7 +133,7 @@ export const Sidebar: React.FC = () => {
       >
         Security
       </SidebarNavItem>
-      {dashboard.experiments.includes("deployment_health_page") && (
+      {dashboard.enabledExperiments.includes("deployment_health_page") && (
         <SidebarNavItem
           href="/health"
           icon={<SidebarNavItemIcon icon={MonitorHeartOutlined} />}
