@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coder/coder/v2/tailnet/proto"
+
 	"github.com/google/uuid"
 
 	"cdr.dev/slog"
@@ -65,7 +67,12 @@ func NewTrackedConn(ctx context.Context, cancel func(),
 	}
 }
 
-func (t *TrackedConn) Enqueue(n []*Node) (err error) {
+func (t *TrackedConn) Enqueue(resp *proto.CoordinateResponse) (err error) {
+	n, err := OnlyNodeUpdates(resp)
+	if err != nil {
+		return err
+	}
+
 	atomic.StoreInt64(&t.lastWrite, time.Now().Unix())
 	select {
 	case t.updates <- n:

@@ -22,6 +22,7 @@ import (
 
 	"cdr.dev/slog"
 	"github.com/coder/coder/v2/coderd/util/slice"
+	"github.com/coder/coder/v2/tailnet/proto"
 )
 
 // Coordinator exchanges nodes with agents to establish connections.
@@ -201,7 +202,7 @@ const (
 type Queue interface {
 	UniqueID() uuid.UUID
 	Kind() QueueKind
-	Enqueue(n []*Node) error
+	Enqueue(msg *proto.CoordinateResponse) error
 	Name() string
 	Stats() (start, lastWrite int64)
 	Overwrites() int64
@@ -285,7 +286,13 @@ func (c *coordinator) ServeClient(conn net.Conn, id, agentID uuid.UUID) error {
 	}
 
 	if agentNode != nil {
-		err := tc.Enqueue([]*Node{agentNode})
+		resp, err := SingleNodeUpdate(agentID, agentNode, "initial subscribe")
+		if err != nil {
+			// this should never happen unless we have data corruption
+			logger.Critical(ctx, "failed conversion", slog.Error(err))
+			return err
+		}
+		err = tc.Enqueue(resp)
 		if err != nil {
 			logger.Debug(ctx, "enqueue initial node", slog.Error(err))
 		}
@@ -377,6 +384,12 @@ func (c *core) clientNodeUpdate(id uuid.UUID, node *Node) error {
 
 func (c *core) clientNodeUpdateLocked(id uuid.UUID, node *Node) error {
 	logger := c.clientLogger(id, uuid.Nil)
+	resp, err := SingleNodeUpdate(id, node, "client update")
+	if err != nil {
+		// this should never happen unless we have data corruption
+		logger.Critical(context.Background(), "failed conversion", slog.Error(err))
+		return err
+	}
 
 	agents := []uuid.UUID{}
 	for agentID, agentSocket := range c.clientsToAgents[id] {
@@ -385,7 +398,7 @@ func (c *core) clientNodeUpdateLocked(id uuid.UUID, node *Node) error {
 			continue
 		}
 
-		err := agentSocket.Enqueue([]*Node{node})
+		err := agentSocket.Enqueue(resp)
 		if err != nil {
 			logger.Debug(context.Background(), "unable to Enqueue node to agent", slog.Error(err), slog.F("agent_id", agentID))
 			continue
@@ -413,7 +426,13 @@ func (c *core) clientSubscribeToAgent(enq Queue, agentID uuid.UUID) (*Node, erro
 		if !ok {
 			logger.Debug(context.Background(), "subscribe to agent; socket is nil")
 		} else {
-			err := agentSocket.Enqueue([]*Node{node})
+			resp, err := SingleNodeUpdate(enq.UniqueID(), node, "client subscribe to agent")
+			if err != nil {
+				// this should never happen unless we have data corruption
+				logger.Critical(context.Background(), "failed conversion", slog.Error(err))
+				return nil, err
+			}
+			err = agentSocket.Enqueue(resp)
 			if err != nil {
 				return nil, xerrors.Errorf("enqueue client to agent: %w", err)
 			}
@@ -525,15 +544,28 @@ func (c *core) initAndTrackAgent(ctx context.Context, cancel func(), conn net.Co
 	if ok {
 		// Publish all nodes that want to connect to the
 		// desired agent ID.
-		nodes := make([]*Node, 0, len(sockets))
+		resp := &proto.CoordinateResponse{
+			PeerUpdates: make([]*proto.CoordinateResponse_PeerUpdate, 0, len(sockets)),
+		}
 		for targetID := range sockets {
 			node, ok := c.nodes[targetID]
 			if !ok {
 				continue
 			}
-			nodes = append(nodes, node)
+			pn, err := NodeToProto(node)
+			if err != nil {
+				// this should never happen unless we have data corruption
+				logger.Critical(context.Background(), "failed conversion", slog.Error(err))
+				return nil, err
+			}
+			resp.PeerUpdates = append(resp.PeerUpdates, &proto.CoordinateResponse_PeerUpdate{
+				Uuid:   UUIDToByteSlice(targetID),
+				Node:   pn,
+				Kind:   proto.CoordinateResponse_PeerUpdate_NODE,
+				Reason: "initial clients of agent",
+			})
 		}
-		err := tc.Enqueue(nodes)
+		err := tc.Enqueue(resp)
 		// this should never error since we're still the only goroutine that
 		// knows about the TrackedConn.  If we hit an error something really
 		// wrong is happening
@@ -541,7 +573,7 @@ func (c *core) initAndTrackAgent(ctx context.Context, cancel func(), conn net.Co
 			logger.Critical(ctx, "unable to queue initial nodes", slog.Error(err))
 			return nil, err
 		}
-		logger.Debug(ctx, "wrote initial client(s) to agent", slog.F("nodes", nodes))
+		logger.Debug(ctx, "wrote initial client(s) to agent", slog.F("resp", resp))
 	}
 
 	c.agentSockets[id] = tc
@@ -597,7 +629,13 @@ func (c *core) agentNodeUpdate(id uuid.UUID, node *Node) error {
 
 	// Publish the new node to every listening socket.
 	for clientID, connectionSocket := range connectionSockets {
-		err := connectionSocket.Enqueue([]*Node{node})
+		resp, err := SingleNodeUpdate(id, node, "agent update")
+		if err != nil {
+			// this should never happen unless we have data corruption
+			logger.Critical(context.Background(), "failed conversion", slog.Error(err))
+			return err
+		}
+		err = connectionSocket.Enqueue(resp)
 		if err == nil {
 			logger.Debug(context.Background(), "enqueued agent node to client",
 				slog.F("client_id", clientID))

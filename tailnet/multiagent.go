@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/xerrors"
+
+	"github.com/coder/coder/v2/tailnet/proto"
 )
 
 type MultiAgentConn interface {
@@ -114,7 +116,11 @@ func (m *MultiAgent) NextUpdate(ctx context.Context) ([]*Node, bool) {
 	}
 }
 
-func (m *MultiAgent) Enqueue(nodes []*Node) error {
+func (m *MultiAgent) Enqueue(resp *proto.CoordinateResponse) error {
+	nodes, err := OnlyNodeUpdates(resp)
+	if err != nil {
+		return err
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
