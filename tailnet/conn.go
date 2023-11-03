@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wlynxg/anet"
+
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"go4.org/netipx"
@@ -24,6 +26,7 @@ import (
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/net/connstats"
 	"tailscale.com/net/dns"
+	"tailscale.com/net/interfaces"
 	"tailscale.com/net/netmon"
 	"tailscale.com/net/netns"
 	"tailscale.com/net/tsdial"
@@ -83,6 +86,25 @@ func init() {
 	// agents, it's connections to a small number of clients (CLI or Coderd)
 	// that are being actively used by the end user.
 	envknob.Setenv("TS_DEBUG_TRIM_WIREGUARD", "false")
+	// On Android, `net.Interfaces` doesn't work with SDK>=30.
+	// At the time of writing we don't currently build for Android,
+	// but a community user submitted an issue, and this is a simple fix.
+	// Issue: https://github.com/coder/coder/issues/10512
+	// See the README of https://github.com/wlynxg/anet for more details.
+	interfaces.RegisterInterfaceGetter(func() ([]interfaces.Interface, error) {
+		ifs, err := anet.Interfaces()
+		if err != nil {
+			return nil, err
+		}
+		var out []interfaces.Interface
+		for _, iface := range ifs {
+			iface := iface
+			out = append(out, interfaces.Interface{
+				Interface: &iface,
+			})
+		}
+		return out, nil
+	})
 }
 
 type Options struct {
