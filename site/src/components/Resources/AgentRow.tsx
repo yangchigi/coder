@@ -10,7 +10,6 @@ import type {
   WorkspaceAgentMetadata,
 } from "api/typesGenerated";
 import { DropdownArrow } from "components/DropdownArrow/DropdownArrow";
-import { displayError } from "components/GlobalSnackbar/utils";
 import { VSCodeDesktopButton } from "components/Resources/VSCodeDesktopButton/VSCodeDesktopButton";
 import {
   Line,
@@ -472,6 +471,11 @@ const useAgentLogs = (
       // Get all logs
       after: 0,
       onMessage: (logs) => {
+        // Prevent new logs getting added when a connection is not open
+        if (socket.current?.readyState !== WebSocket.OPEN) {
+          return;
+        }
+
         setLogs((previousLogs) => {
           const newLogs: LineWithID[] = logs.map((log) => ({
             id: log.id,
@@ -488,8 +492,14 @@ const useAgentLogs = (
           return [...previousLogs, ...newLogs];
         });
       },
-      onError: () => {
-        displayError("Error on getting agent logs");
+      onError: (error) => {
+        // For some reason Firefox and Safari throw an error when a websocket
+        // connection is close in the middle of a message and because of that we
+        // can't safely show to the users an error message since most of the
+        // time they are just internal stuff. This does not happen to Chrome at
+        // all and I tried to find better way to "soft close" a WS connection on
+        // those browsers without success.
+        console.error(error);
       },
     });
 
@@ -563,31 +573,31 @@ const styles = {
   }),
 
   agentInfo: (theme) => ({
-    padding: theme.spacing(2, 4),
+    padding: "16px 32px",
     display: "flex",
     alignItems: "center",
-    gap: theme.spacing(6),
+    gap: 48,
     flexWrap: "wrap",
 
     [theme.breakpoints.down("md")]: {
-      gap: theme.spacing(2),
+      gap: 16,
     },
   }),
 
   agentNameAndInfo: (theme) => ({
     display: "flex",
     alignItems: "center",
-    gap: theme.spacing(3),
+    gap: 24,
     flexWrap: "wrap",
 
     [theme.breakpoints.down("md")]: {
-      gap: theme.spacing(1.5),
+      gap: 12,
     },
   }),
 
   agentButtons: (theme) => ({
     display: "flex",
-    gap: theme.spacing(1),
+    gap: 8,
     justifyContent: "flex-end",
     flexWrap: "wrap",
     flex: 1,
@@ -607,7 +617,7 @@ const styles = {
     maxHeight: 256,
     borderBottom: `1px solid ${theme.palette.divider}`,
     backgroundColor: theme.palette.background.paper,
-    paddingTop: theme.spacing(2),
+    paddingTop: 16,
 
     // We need this to be able to apply the padding top from startupLogs
     "& > div": {
@@ -618,7 +628,7 @@ const styles = {
   agentNameAndStatus: (theme) => ({
     display: "flex",
     alignItems: "center",
-    gap: theme.spacing(4),
+    gap: 32,
 
     [theme.breakpoints.down("md")]: {
       width: "100%",
@@ -631,7 +641,7 @@ const styles = {
     textOverflow: "ellipsis",
     maxWidth: 260,
     fontWeight: 600,
-    fontSize: theme.spacing(2),
+    fontSize: 16,
     flexShrink: 0,
     width: "fit-content",
 
@@ -640,11 +650,11 @@ const styles = {
     },
   }),
 
-  agentDataGroup: (theme) => ({
+  agentDataGroup: {
     display: "flex",
     alignItems: "baseline",
-    gap: theme.spacing(6),
-  }),
+    gap: 48,
+  },
 
   agentData: (theme) => ({
     display: "flex",
@@ -670,12 +680,12 @@ const styles = {
     background: "transparent",
     border: 0,
     fontFamily: "inherit",
-    padding: theme.spacing(1.5, 4),
+    padding: "12px 32px",
     color: theme.palette.text.secondary,
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
-    gap: theme.spacing(1),
+    gap: 8,
     whiteSpace: "nowrap",
 
     "&:hover": {
@@ -699,7 +709,7 @@ const styles = {
   agentErrorMessage: (theme) => ({
     fontSize: 12,
     fontWeight: 400,
-    marginTop: theme.spacing(0.5),
+    marginTop: 4,
     color: theme.palette.warning.light,
   }),
 

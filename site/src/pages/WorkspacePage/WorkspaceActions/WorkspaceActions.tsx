@@ -1,5 +1,6 @@
 import { FC, Fragment, ReactNode } from "react";
 import { Workspace, WorkspaceBuildParameter } from "api/typesGenerated";
+import { useWorkspaceDuplication } from "pages/CreateWorkspacePage/useWorkspaceDuplication";
 import {
   ActionLoadingButton,
   CancelButton,
@@ -15,16 +16,20 @@ import {
   ButtonTypesEnum,
   actionsByWorkspaceStatus,
 } from "./constants";
-import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
-import HistoryOutlined from "@mui/icons-material/HistoryOutlined";
-import DeleteOutlined from "@mui/icons-material/DeleteOutlined";
+
+import Divider from "@mui/material/Divider";
+import DuplicateIcon from "@mui/icons-material/FileCopyOutlined";
+import SettingsIcon from "@mui/icons-material/SettingsOutlined";
+import HistoryIcon from "@mui/icons-material/HistoryOutlined";
+import DeleteIcon from "@mui/icons-material/DeleteOutlined";
+
 import {
   MoreMenu,
   MoreMenuContent,
   MoreMenuItem,
   MoreMenuTrigger,
+  ThreeDotsButton,
 } from "components/MoreMenu/MoreMenu";
-import Divider from "@mui/material/Divider";
 
 export interface WorkspaceActionsProps {
   workspace: Workspace;
@@ -68,6 +73,8 @@ export const WorkspaceActions: FC<WorkspaceActionsProps> = ({
     canChangeVersions,
   );
   const canBeUpdated = workspace.outdated && canAcceptJobs;
+  const { duplicateWorkspace, isDuplicationReady } =
+    useWorkspaceDuplication(workspace);
 
   // A mapping of button type to the corresponding React component
   const buttonMapping: ButtonMapping = {
@@ -109,49 +116,62 @@ export const WorkspaceActions: FC<WorkspaceActionsProps> = ({
 
   return (
     <div
-      css={(theme) => ({
-        display: "flex",
-        alignItems: "center",
-        gap: theme.spacing(1.5),
-      })}
+      css={{ display: "flex", alignItems: "center", gap: 12 }}
       data-testid="workspace-actions"
     >
       {canBeUpdated &&
         (isUpdating
           ? buttonMapping[ButtonTypesEnum.updating]
           : buttonMapping[ButtonTypesEnum.update])}
+
       {isRestarting && buttonMapping[ButtonTypesEnum.restarting]}
+
       {!isRestarting &&
         actionsByStatus.map((action) => (
           <Fragment key={action}>{buttonMapping[action]}</Fragment>
         ))}
+
       {canCancel && <CancelButton handleAction={handleCancel} />}
       <MoreMenu>
-        <MoreMenuTrigger
-          title="More options"
-          size="small"
-          data-testid="workspace-options-button"
-          aria-controls="workspace-options"
-          disabled={!canAcceptJobs}
-        />
+        <MoreMenuTrigger>
+          <ThreeDotsButton
+            title="More options"
+            size="small"
+            data-testid="workspace-options-button"
+            aria-controls="workspace-options"
+            disabled={!canAcceptJobs}
+          />
+        </MoreMenuTrigger>
+
         <MoreMenuContent id="workspace-options">
           <MoreMenuItem onClick={handleSettings}>
-            <SettingsOutlined />
+            <SettingsIcon />
             Settings
           </MoreMenuItem>
+
           {canChangeVersions && (
             <MoreMenuItem onClick={handleChangeVersion}>
-              <HistoryOutlined />
+              <HistoryIcon />
               Change version&hellip;
             </MoreMenuItem>
           )}
+
+          <MoreMenuItem
+            onClick={duplicateWorkspace}
+            disabled={!isDuplicationReady}
+          >
+            <DuplicateIcon />
+            Duplicate&hellip;
+          </MoreMenuItem>
+
           <Divider />
+
           <MoreMenuItem
             danger
             onClick={handleDelete}
             data-testid="delete-button"
           >
-            <DeleteOutlined />
+            <DeleteIcon />
             Delete&hellip;
           </MoreMenuItem>
         </MoreMenuContent>

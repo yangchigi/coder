@@ -73,7 +73,14 @@ export const WorkspaceStatusText: FC<
           role="status"
           data-testid="build-status"
           className={className}
-          css={[styles.root, styles[`type-${type}`]]}
+          css={[
+            styles.root,
+            (theme) => ({
+              color: type
+                ? theme.experimental.roles[type].fill
+                : theme.experimental.l1.text,
+            }),
+          ]}
         >
           {text}
         </span>
@@ -89,7 +96,7 @@ const FailureTooltip = styled(({ className, ...props }: TooltipProps) => (
     backgroundColor: theme.palette.background.paperLight,
     border: `1px solid ${theme.palette.divider}`,
     fontSize: 12,
-    padding: theme.spacing(1, 1.25),
+    padding: "8px 10px",
   },
 }));
 

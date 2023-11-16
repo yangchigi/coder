@@ -1,6 +1,5 @@
-import { type Interpolation, type Theme } from "@emotion/react";
+import { type Interpolation, type Theme, useTheme } from "@emotion/react";
 import Button from "@mui/material/Button";
-import { useTheme } from "@mui/styles";
 import Skeleton from "@mui/material/Skeleton";
 import AddIcon from "@mui/icons-material/AddOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -128,25 +127,25 @@ const LicensesSettingsPageView: FC<Props> = ({
 };
 
 const styles = {
-  title: (theme) => ({
-    fontSize: theme.spacing(2),
-  }),
+  title: {
+    fontSize: 16,
+  },
 
   root: (theme) => ({
-    minHeight: theme.spacing(30),
+    minHeight: 240,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: theme.shape.borderRadius,
+    borderRadius: 8,
     border: `1px solid ${theme.palette.divider}`,
-    padding: theme.spacing(6),
+    padding: 48,
   }),
 
   description: (theme) => ({
     color: theme.palette.text.secondary,
     textAlign: "center",
-    maxWidth: theme.spacing(58),
-    marginTop: theme.spacing(1),
+    maxWidth: 464,
+    marginTop: 8,
   }),
 } satisfies Record<string, Interpolation<Theme>>;
 

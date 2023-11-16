@@ -1,11 +1,12 @@
-import { colors, experimentalTheme } from "./colors";
+import { colors } from "./colors";
 import { createTheme, type ThemeOptions } from "@mui/material/styles";
-import { BODY_FONT_FAMILY, borderRadius } from "./constants";
-
-// MUI does not have aligned heights for buttons and inputs so we have to "hack" it a little bit
-export const BUTTON_LG_HEIGHT = 40;
-export const BUTTON_MD_HEIGHT = 36;
-export const BUTTON_SM_HEIGHT = 32;
+import {
+  BODY_FONT_FAMILY,
+  borderRadius,
+  BUTTON_LG_HEIGHT,
+  BUTTON_MD_HEIGHT,
+  BUTTON_SM_HEIGHT,
+} from "./constants";
 
 export type PaletteIndex =
   | "primary"
@@ -31,27 +32,27 @@ export let dark = createTheme({
     secondary: {
       main: colors.gray[11],
       contrastText: colors.gray[4],
-      dark: colors.indigo[7],
+      dark: colors.gray[9],
     },
     background: {
       default: colors.gray[17],
       paper: colors.gray[16],
-      paperLight: colors.gray[15],
+      paperLight: colors.gray[14],
     },
     text: {
       primary: colors.gray[1],
-      secondary: colors.gray[5],
-      disabled: colors.gray[7],
+      secondary: colors.gray[4],
+      disabled: colors.gray[9],
     },
     divider: colors.gray[13],
     warning: {
-      light: experimentalTheme ? colors.orange[9] : colors.orange[7],
-      main: experimentalTheme ? colors.orange[11] : colors.orange[9],
+      light: colors.orange[9],
+      main: colors.orange[12],
       dark: colors.orange[15],
     },
     success: {
       main: colors.green[11],
-      dark: colors.green[15],
+      dark: colors.green[12],
     },
     info: {
       light: colors.blue[7],
@@ -144,7 +145,7 @@ dark = createTheme(dark, {
           letterSpacing: "normal",
           fontWeight: 500,
           height: BUTTON_MD_HEIGHT,
-          padding: theme.spacing(1, 2),
+          padding: "8px 16px",
           borderRadius: "6px",
           fontSize: 14,
 
@@ -171,7 +172,7 @@ dark = createTheme(dark, {
         },
         outlined: {
           ":hover": {
-            border: `1px solid ${colors.gray[10]}`,
+            border: `1px solid ${colors.gray[11]}`,
           },
         },
         outlinedNeutral: {
@@ -213,7 +214,7 @@ dark = createTheme(dark, {
         root: {
           ">button:hover+button": {
             // The !important is unfortunate, but necessary for the border.
-            borderLeftColor: `${colors.gray[10]} !important`,
+            borderLeftColor: `${colors.gray[11]} !important`,
           },
         },
       },
@@ -345,8 +346,8 @@ dark = createTheme(dark, {
         root: {
           // It should be the same as the menu padding
           "& .MuiDivider-root": {
-            marginTop: 4,
-            marginBottom: 4,
+            marginTop: `4px !important`,
+            marginBottom: `4px !important`,
           },
         },
       },
@@ -406,7 +407,7 @@ dark = createTheme(dark, {
           // The default outlined input color is white, which seemed jarring.
           "&:hover:not(.Mui-error):not(.Mui-focused) .MuiOutlinedInput-notchedOutline":
             {
-              borderColor: colors.gray[10],
+              borderColor: colors.gray[11],
             },
         },
       },
@@ -427,6 +428,26 @@ dark = createTheme(dark, {
     MuiCheckbox: {
       styleOverrides: {
         root: {
+          /**
+           * Adds focus styling to checkboxes (which doesn't exist normally, for
+           * some reason?).
+           *
+           * The checkbox component is a root span with a checkbox input inside
+           * it. MUI does not allow you to use selectors like (& input) to
+           * target the inner checkbox (even though you can use & td to style
+           * tables). Tried every combination of selector possible (including
+           * lots of !important), and the main issue seems to be that the
+           * styling just never gets processed for it to get injected into the
+           * CSSOM.
+           *
+           * Had to settle for adding styling to the span itself (which does
+           * make the styling more obvious, even if there's not much room for
+           * customization).
+           */
+          "&.Mui-focusVisible": {
+            boxShadow: `0 0 0 2px ${colors.blue[7]}`,
+          },
+
           "&.Mui-disabled": {
             color: colors.gray[11],
           },
@@ -434,8 +455,15 @@ dark = createTheme(dark, {
       },
     },
     MuiSwitch: {
-      defaultProps: {
-        color: "primary",
+      defaultProps: { color: "primary" },
+      styleOverrides: {
+        root: {
+          ".Mui-focusVisible .MuiSwitch-thumb": {
+            // Had to thicken outline to make sure that the focus color didn't
+            // bleed into the thumb and was still easily-visible
+            boxShadow: `0 0 0 3px ${colors.blue[7]}`,
+          },
+        },
       },
     },
     MuiAutocomplete: {
@@ -493,6 +521,16 @@ dark = createTheme(dark, {
         root: {
           fontSize: "inherit",
           marginBottom: 0,
+        },
+      },
+    },
+
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          "&.Mui-focusVisible": {
+            boxShadow: `0 0 0 2px ${colors.blue[7]}`,
+          },
         },
       },
     },

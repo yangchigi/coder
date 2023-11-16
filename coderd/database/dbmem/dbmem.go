@@ -678,6 +678,13 @@ func (q *FakeQuerier) GetActiveDBCryptKeys(_ context.Context) ([]database.DBCryp
 	return ks, nil
 }
 
+func maxTime(t, u time.Time) time.Time {
+	if t.After(u) {
+		return t
+	}
+	return u
+}
+
 func minTime(t, u time.Time) time.Time {
 	if t.Before(u) {
 		return t
@@ -775,8 +782,8 @@ func (q *FakeQuerier) AcquireProvisionerJob(_ context.Context, arg database.Acqu
 	return database.ProvisionerJob{}, sql.ErrNoRows
 }
 
-func (q *FakeQuerier) ActivityBumpWorkspace(ctx context.Context, workspaceID uuid.UUID) error {
-	err := validateDatabaseType(workspaceID)
+func (q *FakeQuerier) ActivityBumpWorkspace(ctx context.Context, arg database.ActivityBumpWorkspaceParams) error {
+	err := validateDatabaseType(arg)
 	if err != nil {
 		return err
 	}
@@ -784,11 +791,11 @@ func (q *FakeQuerier) ActivityBumpWorkspace(ctx context.Context, workspaceID uui
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	workspace, err := q.getWorkspaceByIDNoLock(ctx, workspaceID)
+	workspace, err := q.getWorkspaceByIDNoLock(ctx, arg.WorkspaceID)
 	if err != nil {
 		return err
 	}
-	latestBuild, err := q.getLatestWorkspaceBuildByWorkspaceIDNoLock(ctx, workspaceID)
+	latestBuild, err := q.getLatestWorkspaceBuildByWorkspaceIDNoLock(ctx, arg.WorkspaceID)
 	if err != nil {
 		return err
 	}
@@ -822,15 +829,17 @@ func (q *FakeQuerier) ActivityBumpWorkspace(ctx context.Context, workspaceID uui
 		}
 
 		var ttlDur time.Duration
-		if workspace.Ttl.Valid {
-			ttlDur = time.Duration(workspace.Ttl.Int64)
-		}
-		if !template.AllowUserAutostop {
-			ttlDur = time.Duration(template.DefaultTTL)
-		}
-		if ttlDur <= 0 {
-			// There's no TTL set anymore, so we don't know the bump duration.
-			return nil
+		if now.Add(time.Hour).After(arg.NextAutostart) && arg.NextAutostart.After(now) {
+			// Extend to TTL
+			add := arg.NextAutostart.Sub(now)
+			if workspace.Ttl.Valid && template.AllowUserAutostop {
+				add += time.Duration(workspace.Ttl.Int64)
+			} else {
+				add += time.Duration(template.DefaultTTL)
+			}
+			ttlDur = add
+		} else {
+			ttlDur = time.Hour
 		}
 
 		// Only bump if 5% of the deadline has passed.
@@ -842,6 +851,8 @@ func (q *FakeQuerier) ActivityBumpWorkspace(ctx context.Context, workspaceID uui
 
 		// Bump.
 		newDeadline := now.Add(ttlDur)
+		// Never decrease deadlines from a bump
+		newDeadline = maxTime(newDeadline, q.workspaceBuilds[i].Deadline)
 		q.workspaceBuilds[i].UpdatedAt = now
 		if !q.workspaceBuilds[i].MaxDeadline.IsZero() {
 			q.workspaceBuilds[i].Deadline = minTime(newDeadline, q.workspaceBuilds[i].MaxDeadline)
@@ -973,6 +984,15 @@ func (q *FakeQuerier) DeleteAPIKeysByUserID(_ context.Context, userID uuid.UUID)
 }
 
 func (*FakeQuerier) DeleteAllTailnetClientSubscriptions(_ context.Context, arg database.DeleteAllTailnetClientSubscriptionsParams) error {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return err
+	}
+
+	return ErrUnimplemented
+}
+
+func (*FakeQuerier) DeleteAllTailnetTunnels(_ context.Context, arg database.DeleteAllTailnetTunnelsParams) error {
 	err := validateDatabaseType(arg)
 	if err != nil {
 		return err
@@ -1116,6 +1136,24 @@ func (*FakeQuerier) DeleteTailnetClient(context.Context, database.DeleteTailnetC
 
 func (*FakeQuerier) DeleteTailnetClientSubscription(context.Context, database.DeleteTailnetClientSubscriptionParams) error {
 	return ErrUnimplemented
+}
+
+func (*FakeQuerier) DeleteTailnetPeer(_ context.Context, arg database.DeleteTailnetPeerParams) (database.DeleteTailnetPeerRow, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return database.DeleteTailnetPeerRow{}, err
+	}
+
+	return database.DeleteTailnetPeerRow{}, ErrUnimplemented
+}
+
+func (*FakeQuerier) DeleteTailnetTunnel(_ context.Context, arg database.DeleteTailnetTunnelParams) (database.DeleteTailnetTunnelRow, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return database.DeleteTailnetTunnelRow{}, err
+	}
+
+	return database.DeleteTailnetTunnelRow{}, ErrUnimplemented
 }
 
 func (q *FakeQuerier) GetAPIKeyByID(_ context.Context, id string) (database.APIKey, error) {
@@ -2240,6 +2278,18 @@ func (*FakeQuerier) GetTailnetClientsForAgent(context.Context, uuid.UUID) ([]dat
 	return nil, ErrUnimplemented
 }
 
+func (*FakeQuerier) GetTailnetPeers(context.Context, uuid.UUID) ([]database.TailnetPeer, error) {
+	return nil, ErrUnimplemented
+}
+
+func (*FakeQuerier) GetTailnetTunnelPeerBindings(context.Context, uuid.UUID) ([]database.GetTailnetTunnelPeerBindingsRow, error) {
+	return nil, ErrUnimplemented
+}
+
+func (*FakeQuerier) GetTailnetTunnelPeerIDs(context.Context, uuid.UUID) ([]database.GetTailnetTunnelPeerIDsRow, error) {
+	return nil, ErrUnimplemented
+}
+
 func (q *FakeQuerier) GetTemplateAppInsights(ctx context.Context, arg database.GetTemplateAppInsightsParams) ([]database.GetTemplateAppInsightsRow, error) {
 	err := validateDatabaseType(arg)
 	if err != nil {
@@ -2363,6 +2413,106 @@ func (q *FakeQuerier) GetTemplateAppInsights(ctx context.Context, arg database.G
 	// NOTE(mafredri): Add sorting if we decide on how to handle PostgreSQL collations.
 	// ORDER BY access_method, slug_or_port, display_name, icon, is_app
 	return rows, nil
+}
+
+func (q *FakeQuerier) GetTemplateAppInsightsByTemplate(ctx context.Context, arg database.GetTemplateAppInsightsByTemplateParams) ([]database.GetTemplateAppInsightsByTemplateRow, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return nil, err
+	}
+
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+
+	type uniqueKey struct {
+		TemplateID  uuid.UUID
+		DisplayName string
+		Slug        string
+	}
+
+	// map (TemplateID + DisplayName + Slug) x time.Time x UserID x <usage>
+	usageByTemplateAppUser := map[uniqueKey]map[time.Time]map[uuid.UUID]int64{}
+
+	// Review agent stats in terms of usage
+	for _, s := range q.workspaceAppStats {
+		// (was.session_started_at >= ts.from_ AND was.session_started_at < ts.to_)
+		// OR (was.session_ended_at > ts.from_ AND was.session_ended_at < ts.to_)
+		// OR (was.session_started_at < ts.from_ AND was.session_ended_at >= ts.to_)
+		if !(((s.SessionStartedAt.After(arg.StartTime) || s.SessionStartedAt.Equal(arg.StartTime)) && s.SessionStartedAt.Before(arg.EndTime)) ||
+			(s.SessionEndedAt.After(arg.StartTime) && s.SessionEndedAt.Before(arg.EndTime)) ||
+			(s.SessionStartedAt.Before(arg.StartTime) && (s.SessionEndedAt.After(arg.EndTime) || s.SessionEndedAt.Equal(arg.EndTime)))) {
+			continue
+		}
+
+		w, err := q.getWorkspaceByIDNoLock(ctx, s.WorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+
+		app, _ := q.getWorkspaceAppByAgentIDAndSlugNoLock(ctx, database.GetWorkspaceAppByAgentIDAndSlugParams{
+			AgentID: s.AgentID,
+			Slug:    s.SlugOrPort,
+		})
+
+		key := uniqueKey{
+			TemplateID:  w.TemplateID,
+			DisplayName: app.DisplayName,
+			Slug:        app.Slug,
+		}
+
+		t := s.SessionStartedAt.Truncate(time.Minute)
+		if t.Before(arg.StartTime) {
+			t = arg.StartTime
+		}
+		for t.Before(s.SessionEndedAt) && t.Before(arg.EndTime) {
+			if _, ok := usageByTemplateAppUser[key]; !ok {
+				usageByTemplateAppUser[key] = map[time.Time]map[uuid.UUID]int64{}
+			}
+			if _, ok := usageByTemplateAppUser[key][t]; !ok {
+				usageByTemplateAppUser[key][t] = map[uuid.UUID]int64{}
+			}
+			if _, ok := usageByTemplateAppUser[key][t][s.UserID]; !ok {
+				usageByTemplateAppUser[key][t][s.UserID] = 60 // 1 minute
+			}
+			t = t.Add(1 * time.Minute)
+		}
+	}
+
+	// Sort usage data
+	usageKeys := make([]uniqueKey, len(usageByTemplateAppUser))
+	var i int
+	for key := range usageByTemplateAppUser {
+		usageKeys[i] = key
+		i++
+	}
+
+	slices.SortFunc(usageKeys, func(a, b uniqueKey) int {
+		if a.TemplateID != b.TemplateID {
+			return slice.Ascending(a.TemplateID.String(), b.TemplateID.String())
+		}
+		if a.DisplayName != b.DisplayName {
+			return slice.Ascending(a.DisplayName, b.DisplayName)
+		}
+		return slice.Ascending(a.Slug, b.Slug)
+	})
+
+	// Build result
+	var result []database.GetTemplateAppInsightsByTemplateRow
+	for _, usageKey := range usageKeys {
+		r := database.GetTemplateAppInsightsByTemplateRow{
+			TemplateID:  usageKey.TemplateID,
+			DisplayName: sql.NullString{String: usageKey.DisplayName, Valid: true},
+			SlugOrPort:  usageKey.Slug,
+		}
+		for _, mUserUsage := range usageByTemplateAppUser[usageKey] {
+			r.ActiveUsers += int64(len(mUserUsage))
+			for _, usage := range mUserUsage {
+				r.UsageSeconds += usage
+			}
+		}
+		result = append(result, r)
+	}
+	return result, nil
 }
 
 func (q *FakeQuerier) GetTemplateAverageBuildTime(ctx context.Context, arg database.GetTemplateAverageBuildTimeParams) (database.GetTemplateAverageBuildTimeRow, error) {
@@ -6684,6 +6834,24 @@ func (*FakeQuerier) UpsertTailnetClientSubscription(context.Context, database.Up
 
 func (*FakeQuerier) UpsertTailnetCoordinator(context.Context, uuid.UUID) (database.TailnetCoordinator, error) {
 	return database.TailnetCoordinator{}, ErrUnimplemented
+}
+
+func (*FakeQuerier) UpsertTailnetPeer(_ context.Context, arg database.UpsertTailnetPeerParams) (database.TailnetPeer, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return database.TailnetPeer{}, err
+	}
+
+	return database.TailnetPeer{}, ErrUnimplemented
+}
+
+func (*FakeQuerier) UpsertTailnetTunnel(_ context.Context, arg database.UpsertTailnetTunnelParams) (database.TailnetTunnel, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return database.TailnetTunnel{}, err
+	}
+
+	return database.TailnetTunnel{}, ErrUnimplemented
 }
 
 func (q *FakeQuerier) GetAuthorizedTemplates(ctx context.Context, arg database.GetTemplatesWithFilterParams, prepared rbac.PreparedAuthorized) ([]database.Template, error) {

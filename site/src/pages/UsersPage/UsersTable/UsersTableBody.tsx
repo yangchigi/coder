@@ -15,7 +15,7 @@ import {
   TableLoaderSkeleton,
   TableRowSkeleton,
 } from "components/TableLoader/TableLoader";
-import { EnterpriseBadge } from "components/DeploySettingsLayout/Badges";
+import { EnterpriseBadge } from "components/Badges/Badges";
 import HideSourceOutlined from "@mui/icons-material/HideSourceOutlined";
 import KeyOutlined from "@mui/icons-material/KeyOutlined";
 import GitHub from "@mui/icons-material/GitHub";
@@ -30,6 +30,7 @@ import {
   MoreMenuTrigger,
   MoreMenuContent,
   MoreMenuItem,
+  ThreeDotsButton,
 } from "components/MoreMenu/MoreMenu";
 import Divider from "@mui/material/Divider";
 
@@ -183,7 +184,9 @@ export const UsersTableBody: FC<
             {canEditUsers && (
               <TableCell>
                 <MoreMenu>
-                  <MoreMenuTrigger />
+                  <MoreMenuTrigger>
+                    <ThreeDotsButton />
+                  </MoreMenuTrigger>
                   <MoreMenuContent>
                     {user.status === "active" || user.status === "dormant" ? (
                       <MoreMenuItem

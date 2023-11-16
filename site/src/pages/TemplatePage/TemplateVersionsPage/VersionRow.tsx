@@ -33,6 +33,7 @@ export const VersionRow: React.FC<VersionRowProps> = ({
   });
 
   const jobStatus = version.job.status;
+  const showActions = onPromoteClick || onArchiveClick;
 
   return (
     <TimelineEntry
@@ -77,44 +78,46 @@ export const VersionRow: React.FC<VersionRowProps> = ({
           <Stack direction="row" alignItems="center" spacing={2}>
             {isActive && <Pill text="Active" type="success" />}
             {isLatest && <Pill text="Newest" type="info" />}
+
             {jobStatus === "pending" && (
-              <Pill text={<>Pending&hellip;</>} type="warning" lightBorder />
+              <Pill text={<>Pending&hellip;</>} type="warning" />
             )}
             {jobStatus === "running" && (
-              <Pill text={<>Building&hellip;</>} type="warning" lightBorder />
+              <Pill text={<>Building&hellip;</>} type="warning" />
             )}
             {(jobStatus === "canceling" || jobStatus === "canceled") && (
-              <Pill text="Canceled" type="neutral" lightBorder />
+              <Pill text="Canceled" type="neutral" />
             )}
             {jobStatus === "failed" && <Pill text="Failed" type="error" />}
-            {jobStatus === "failed" ? (
-              <Button
-                css={styles.promoteButton}
-                disabled={isActive || version.archived}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (onArchiveClick) {
-                    onArchiveClick(version.id);
-                  }
-                }}
-              >
-                Archive&hellip;
-              </Button>
-            ) : (
-              <Button
-                css={styles.promoteButton}
-                disabled={isActive || jobStatus !== "succeeded"}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (onPromoteClick) {
-                    onPromoteClick(version.id);
-                  }
-                }}
-              >
-                Promote&hellip;
-              </Button>
+
+            {showActions && (
+              <>
+                {jobStatus === "failed" ? (
+                  <Button
+                    css={styles.promoteButton}
+                    disabled={isActive || version.archived}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onArchiveClick?.(version.id);
+                    }}
+                  >
+                    Archive&hellip;
+                  </Button>
+                ) : (
+                  <Button
+                    css={styles.promoteButton}
+                    disabled={isActive || jobStatus !== "succeeded"}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onPromoteClick?.(version.id);
+                    }}
+                  >
+                    Promote&hellip;
+                  </Button>
+                )}
+              </>
             )}
           </Stack>
         </Stack>
@@ -139,9 +142,9 @@ const styles = {
     transition: "none",
   }),
 
-  versionWrapper: (theme) => ({
-    padding: theme.spacing(2, 4),
-  }),
+  versionWrapper: {
+    padding: "16px 32px",
+  },
 
   active: (theme) => ({
     backgroundColor: theme.palette.background.paperLight,

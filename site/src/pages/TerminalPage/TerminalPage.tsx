@@ -333,7 +333,7 @@ const BottomBar = ({ proxy, latency }: { proxy: Region; latency?: number }) => {
   return (
     <Box
       sx={{
-        padding: theme.spacing(0, 2),
+        padding: "0 16px",
         background: (theme) => theme.palette.background.paper,
         display: "flex",
         alignItems: "center",
@@ -348,14 +348,14 @@ const BottomBar = ({ proxy, latency }: { proxy: Region; latency?: number }) => {
             component="button"
             aria-label="Terminal latency"
             aria-haspopup="true"
-            sx={{
+            css={{
               background: "none",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              gap: 1,
+              gap: 8,
               border: 0,
-              padding: theme.spacing(1),
+              padding: 8,
             }}
           >
             <Box
@@ -376,7 +376,7 @@ const BottomBar = ({ proxy, latency }: { proxy: Region; latency?: number }) => {
           sx={{
             pointerEvents: "none",
             "& .MuiPaper-root": {
-              padding: (theme) => theme.spacing(1, 2),
+              padding: "8px 16px",
             },
           }}
           anchorOrigin={{

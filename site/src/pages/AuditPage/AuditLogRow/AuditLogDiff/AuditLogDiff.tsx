@@ -1,7 +1,7 @@
 import { type Interpolation, type Theme } from "@emotion/react";
 import { type FC } from "react";
 import type { AuditLog } from "api/typesGenerated";
-import { colors } from "theme/colors";
+import colors from "theme/tailwind";
 import { MONOSPACE_FONT_FAMILY } from "theme/constants";
 
 const getDiffValue = (value: unknown): string => {
@@ -69,55 +69,55 @@ const styles = {
     zIndex: 2,
   }),
 
-  diffColumn: (theme) => ({
+  diffColumn: {
     flex: 1,
-    paddingTop: theme.spacing(2),
-    paddingBottom: theme.spacing(2.5),
-    paddingRight: theme.spacing(2),
+    paddingTop: 16,
+    paddingBottom: 20,
+    paddingRight: 16,
     lineHeight: "160%",
     alignSelf: "stretch",
     overflowWrap: "anywhere",
-  }),
+  },
 
-  diffOld: (theme) => ({
-    backgroundColor: theme.palette.error.dark,
-    color: theme.palette.error.contrastText,
-  }),
+  diffOld: {
+    backgroundColor: colors.red[950],
+    color: colors.red[50],
+  },
 
   diffRow: {
     display: "flex",
     alignItems: "baseline",
   },
 
-  diffLine: (theme) => ({
+  diffLine: {
     opacity: 0.5,
-    width: theme.spacing(6),
+    width: 48,
     textAlign: "right",
     flexShrink: 0,
-  }),
+  },
 
   diffIcon: (theme) => ({
-    width: theme.spacing(4),
+    width: 32,
     textAlign: "center",
     fontSize: theme.typography.body1.fontSize,
     flexShrink: 0,
   }),
 
-  diffNew: (theme) => ({
-    backgroundColor: theme.palette.success.dark,
-    color: theme.palette.success.contrastText,
-  }),
+  diffNew: {
+    backgroundColor: colors.green[950],
+    color: colors.green[50],
+  },
 
-  diffValue: (theme) => ({
+  diffValue: {
     padding: 1,
-    borderRadius: theme.shape.borderRadius / 2,
-  }),
+    borderRadius: 4,
+  },
 
   diffValueOld: {
-    backgroundColor: colors.red[12],
+    backgroundColor: colors.red[800],
   },
 
   diffValueNew: {
-    backgroundColor: colors.green[12],
+    backgroundColor: colors.green[800],
   },
 } satisfies Record<string, Interpolation<Theme>>;
