@@ -4,13 +4,64 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
+
+	"tailscale.com/util/singleflight"
 
 	"github.com/coder/coder/v2/coderd/healthcheck"
 	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/coderd/httpmw"
+	"github.com/coder/coder/v2/coderd/workspaceapps"
 	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/tailnet"
 )
+
+type DebugHealthOptions struct {
+	TailnetCoordinator *atomic.Pointer[tailnet.Coordinator]
+	AgentProvider      workspaceapps.AgentProvider
+	HealthcheckTimeout time.Duration
+	HealthcheckRefresh time.Duration
+	HealthcheckFunc    func(ctx context.Context, apiKey string) *healthcheck.Report
+}
+
+type DebugHealth struct {
+	tailnetCoordinator *atomic.Pointer[tailnet.Coordinator]
+	agentProvider      workspaceapps.AgentProvider
+	healthCheckGroup   *singleflight.Group[string, *healthcheck.Report]
+	healthCheckCache   atomic.Pointer[healthcheck.Report]
+	healthcheckTimeout time.Duration
+	healthcheckRefresh time.Duration
+	healthcheckFunc    func(ctx context.Context, apiKey string) *healthcheck.Report
+}
+
+func NewDebugHealth(ctx context.Context, opts DebugHealthOptions) *DebugHealth {
+	dh := &DebugHealth{
+		tailnetCoordinator: opts.TailnetCoordinator,
+		agentProvider:      opts.AgentProvider,
+		healthCheckGroup:   &singleflight.Group[string, *healthcheck.Report]{},
+		healthcheckTimeout: opts.HealthcheckTimeout,
+		healthcheckRefresh: opts.HealthcheckRefresh,
+		healthcheckFunc:    opts.HealthcheckFunc,
+	}
+
+	go func() {
+		ticker := time.NewTicker(opts.HealthcheckRefresh)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				dh.healthcheckFunc(ctx, "???????????????????????????????")
+				dh.healthCheckCache.Store(nil)
+			}
+		}
+	}()
+
+	return dh
+}
 
 // @Summary Debug Info Wireguard Coordinator
 // @ID debug-info-wireguard-coordinator
@@ -19,8 +70,8 @@ import (
 // @Tags Debug
 // @Success 200
 // @Router /debug/coordinator [get]
-func (api *API) debugCoordinator(rw http.ResponseWriter, r *http.Request) {
-	(*api.TailnetCoordinator.Load()).ServeHTTPDebug(rw, r)
+func (dh *DebugHealth) debugCoordinator(rw http.ResponseWriter, r *http.Request) {
+	(*dh.tailnetCoordinator.Load()).ServeHTTPDebug(rw, r)
 }
 
 // @Summary Debug Info Tailnet
@@ -30,8 +81,8 @@ func (api *API) debugCoordinator(rw http.ResponseWriter, r *http.Request) {
 // @Tags Debug
 // @Success 200
 // @Router /debug/tailnet [get]
-func (api *API) debugTailnet(rw http.ResponseWriter, r *http.Request) {
-	api.agentProvider.ServeHTTPDebug(rw, r)
+func (dh *DebugHealth) debugTailnet(rw http.ResponseWriter, r *http.Request) {
+	dh.agentProvider.ServeHTTPDebug(rw, r)
 }
 
 // @Summary Debug Info Deployment Health
@@ -42,9 +93,9 @@ func (api *API) debugTailnet(rw http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} healthcheck.Report
 // @Router /debug/health [get]
 // @Param force query boolean false "Force a healthcheck to run"
-func (api *API) debugDeploymentHealth(rw http.ResponseWriter, r *http.Request) {
+func (dh *DebugHealth) debugDeploymentHealth(rw http.ResponseWriter, r *http.Request) {
 	apiKey := httpmw.APITokenFromRequest(r)
-	ctx, cancel := context.WithTimeout(r.Context(), api.Options.HealthcheckTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), dh.healthcheckTimeout)
 	defer cancel()
 
 	// Check if the forced query parameter is set.
@@ -52,21 +103,21 @@ func (api *API) debugDeploymentHealth(rw http.ResponseWriter, r *http.Request) {
 
 	// Get cached report if it exists and the requester did not force a refresh.
 	if !forced {
-		if report := api.healthCheckCache.Load(); report != nil {
-			if time.Since(report.Time) < api.Options.HealthcheckRefresh {
+		if report := dh.healthCheckCache.Load(); report != nil {
+			if time.Since(report.Time) < dh.healthcheckRefresh {
 				formatHealthcheck(ctx, rw, r, report)
 				return
 			}
 		}
 	}
 
-	resChan := api.healthCheckGroup.DoChan("", func() (*healthcheck.Report, error) {
+	resChan := dh.healthCheckGroup.DoChan("", func() (*healthcheck.Report, error) {
 		// Create a new context not tied to the request.
-		ctx, cancel := context.WithTimeout(context.Background(), api.Options.HealthcheckTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), dh.healthcheckTimeout)
 		defer cancel()
 
-		report := api.HealthcheckFunc(ctx, apiKey)
-		api.healthCheckCache.Store(report)
+		report := dh.healthcheckFunc(ctx, apiKey)
+		dh.healthCheckCache.Store(report)
 		return report, nil
 	})
 
@@ -118,3 +169,49 @@ func formatHealthcheck(ctx context.Context, rw http.ResponseWriter, r *http.Requ
 // @Router /debug/ws [get]
 // @x-apidocgen {"skip": true}
 func _debugws(http.ResponseWriter, *http.Request) {} //nolint:unused
+
+// // RegisterDebugHealthMetrics registers debug health metrics with prometheus.
+// func RegisterDebugHealthMetrics(registerer prometheus.Registerer) error {
+// 	accessURLHealthyGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+// 		Namespace: "coderd",
+// 		Subsystem: "health",
+// 		Name:      "access_url_healthy",
+// 		Help:      "Access URL Health",
+// 	}, []string{})
+// 	err := registerer.Register(accessURLHealthyGauge)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	accessURLReachableGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+// 		Namespace: "coderd",
+// 		Subsystem: "health",
+// 		Name:      "access_url_reachable",
+// 		Help:      "Access URL Reachable",
+// 	}, []string{})
+// 	err = registerer.Register(accessURLReachableGauge)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	accessURLStatusCodeGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+// 		Namespace: "coderd",
+// 		Subsystem: "health",
+// 		Name:      "access_url_status_code",
+// 		Help:      "Access URL Status Code",
+// 	}, []string{})
+// 	err = registerer.Register(accessURLStatusCodeGauge)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	accessURLResponseLengthGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+// 		Namespace: "coderd",
+// 		Subsystem: "health",
+// 		Name:      "access_url_response_len",
+// 		Help:      "Access URL Response Length",
+// 	}, []string{})
+// 	err = registerer.Register(accessURLResponseLengthGauge)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	return nil
+// }

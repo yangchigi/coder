@@ -437,6 +437,14 @@ func New(options *Options) *API {
 		options.HealthcheckRefresh = options.DeploymentValues.Healthcheck.Refresh.Value()
 	}
 
+	debugHealth := NewDebugHealth(ctx, DebugHealthOptions{
+		TailnetCoordinator: &api.TailnetCoordinator,
+		AgentProvider:      api.agentProvider,
+		HealthcheckTimeout: options.HealthcheckTimeout,
+		HealthcheckRefresh: options.HealthcheckRefresh,
+		HealthcheckFunc:    options.HealthcheckFunc,
+	})
+
 	var oidcAuthURLParams map[string]string
 	if options.OIDCConfig != nil {
 		oidcAuthURLParams = options.OIDCConfig.AuthURLParams
@@ -968,9 +976,9 @@ func New(options *Options) *API {
 				},
 			)
 
-			r.Get("/coordinator", api.debugCoordinator)
-			r.Get("/tailnet", api.debugTailnet)
-			r.Get("/health", api.debugDeploymentHealth)
+			r.Get("/coordinator", debugHealth.debugCoordinator)
+			r.Get("/tailnet", debugHealth.debugTailnet)
+			r.Get("/health", debugHealth.debugDeploymentHealth)
 			r.Get("/ws", (&healthcheck.WebsocketEchoServer{}).ServeHTTP)
 			r.Route("/{user}", func(r chi.Router) {
 				r.Use(httpmw.ExtractUserParam(options.Database))
