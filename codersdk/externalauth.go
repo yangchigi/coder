@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // EnhancedExternalAuthProvider is a constant that represents enhanced
@@ -55,6 +56,36 @@ type ExternalAuth struct {
 	AppInstallations []ExternalAuthAppInstallation `json:"installations"`
 	// AppInstallURL is the URL to install the app.
 	AppInstallURL string `json:"app_install_url"`
+}
+
+type UserExternalAuthResponse struct {
+	Providers []ExternalAuthLinkProvider `json:"providers"`
+	// Links are all the authenticated links for the user.
+	// If a link has a provider ID that does not exist, then that provider
+	// is no longer configured, rendering it unusable.
+	Links []ExternalAuthLink `json:"links"`
+}
+
+// ExternalAuthLink is a link between a user and an external auth provider.
+// It excludes information that requires a token to access, so can be statically
+// built from the database and configs.
+type ExternalAuthLink struct {
+	ProviderID      string    `json:"provider_id"`
+	CreatedAt       time.Time `json:"created_at" format:"date-time"`
+	UpdatedAt       time.Time `json:"updated_at" format:"date-time"`
+	HasRefreshToken bool      `json:"has_refresh_token"`
+	Expires         time.Time `json:"expires" format:"date-time"`
+}
+
+// ExternalAuthLinkProvider are the static details of a provider.
+type ExternalAuthLinkProvider struct {
+	ID            string `json:"id"`
+	Type          string `json:"type"`
+	Device        bool   `json:"device"`
+	DisplayName   string `json:"display_name"`
+	DisplayIcon   string `json:"display_icon"`
+	AllowRefresh  bool   `json:"allow_refresh"`
+	AllowValidate bool   `json:"allow_validate"`
 }
 
 type ExternalAuthAppInstallation struct {

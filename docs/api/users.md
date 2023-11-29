@@ -433,6 +433,47 @@ curl -X DELETE http://coder-server:8080/api/v2/users/{user} \
 
 To perform this operation, you must be authenticated. [Learn more](authentication.md).
 
+## Get user external auths
+
+### Code samples
+
+```shell
+# Example request using curl
+curl -X GET http://coder-server:8080/api/v2/users/{user}/external-auths \
+  -H 'Accept: application/json' \
+  -H 'Coder-Session-Token: API_KEY'
+```
+
+`GET /users/{user}/external-auths`
+
+### Parameters
+
+| Name   | In   | Type   | Required | Description          |
+| ------ | ---- | ------ | -------- | -------------------- |
+| `user` | path | string | true     | User ID, name, or me |
+
+### Example responses
+
+> 200 Response
+
+```json
+{
+  "created_at": "2019-08-24T14:15:22Z",
+  "expires": "2019-08-24T14:15:22Z",
+  "has_refresh_token": true,
+  "provider_id": "string",
+  "updated_at": "2019-08-24T14:15:22Z"
+}
+```
+
+### Responses
+
+| Status | Meaning                                                 | Description | Schema                                                           |
+| ------ | ------------------------------------------------------- | ----------- | ---------------------------------------------------------------- |
+| 200    | [OK](https://tools.ietf.org/html/rfc7231#section-6.3.1) | OK          | [codersdk.ExternalAuthLink](schemas.md#codersdkexternalauthlink) |
+
+To perform this operation, you must be authenticated. [Learn more](authentication.md).
+
 ## Get user Git SSH key
 
 ### Code samples

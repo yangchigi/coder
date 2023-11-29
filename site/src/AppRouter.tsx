@@ -131,6 +131,10 @@ const ObservabilitySettingsPage = lazy(
 const ExternalAuthPage = lazy(
   () => import("./pages/ExternalAuthPage/ExternalAuthPage"),
 );
+const UserExternalAuthSettingsPage = lazy(
+  () =>
+    import("./pages/UserExternalAuthSettingsPage/UserExternalAuthSettingsPage"),
+);
 const TemplateVersionPage = lazy(
   () => import("./pages/TemplateVersionPage/TemplateVersionPage"),
 );
@@ -318,6 +322,10 @@ export const AppRouter: FC = () => {
                 <Route path="schedule" element={<SchedulePage />} />
                 <Route path="security" element={<SecurityPage />} />
                 <Route path="ssh-keys" element={<SSHKeysPage />} />
+                <Route
+                  path="external-auth"
+                  element={<UserExternalAuthSettingsPage />}
+                />
                 <Route path="tokens">
                   <Route index element={<TokensPage />} />
                   <Route path="new" element={<CreateTokenPage />} />

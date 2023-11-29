@@ -496,6 +496,26 @@ export interface ExternalAuthDeviceExchange {
 }
 
 // From codersdk/externalauth.go
+export interface ExternalAuthLink {
+  readonly provider_id: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly has_refresh_token: boolean;
+  readonly expires: string;
+}
+
+// From codersdk/externalauth.go
+export interface ExternalAuthLinkProvider {
+  readonly id: string;
+  readonly type: string;
+  readonly device: boolean;
+  readonly display_name: string;
+  readonly display_icon: string;
+  readonly allow_refresh: boolean;
+  readonly allow_validate: boolean;
+}
+
+// From codersdk/externalauth.go
 export interface ExternalAuthUser {
   readonly login: string;
   readonly avatar_url: string;
@@ -1281,6 +1301,12 @@ export interface UserActivityInsightsRequest {
 // From codersdk/insights.go
 export interface UserActivityInsightsResponse {
   readonly report: UserActivityInsightsReport;
+}
+
+// From codersdk/externalauth.go
+export interface UserExternalAuthResponse {
+  readonly providers: ExternalAuthLinkProvider[];
+  readonly links: ExternalAuthLink[];
 }
 
 // From codersdk/insights.go

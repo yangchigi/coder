@@ -3674,6 +3674,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/users/{user}/external-auths": {
+            "get": {
+                "security": [
+                    {
+                        "CoderSessionToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Get user external auths",
+                "operationId": "get-user-external-auths",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID, name, or me",
+                        "name": "user",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/codersdk.ExternalAuthLink"
+                        }
+                    }
+                }
+            }
+        },
         "/users/{user}/gitsshkey": {
             "get": {
                 "security": [
@@ -8780,6 +8814,29 @@ const docTemplate = `{
                 },
                 "verification_uri": {
                     "type": "string"
+                }
+            }
+        },
+        "codersdk.ExternalAuthLink": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "expires": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "has_refresh_token": {
+                    "type": "boolean"
+                },
+                "provider_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "format": "date-time"
                 }
             }
         },

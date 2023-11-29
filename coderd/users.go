@@ -1197,6 +1197,8 @@ func (api *API) CreateUser(ctx context.Context, store database.Store, req Create
 	}, nil)
 }
 
+
+
 func convertUsers(users []database.User, organizationIDsByUserID map[uuid.UUID][]uuid.UUID) []codersdk.User {
 	converted := make([]codersdk.User, 0, len(users))
 	for _, u := range users {

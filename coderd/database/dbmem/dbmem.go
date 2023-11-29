@@ -1019,6 +1019,15 @@ func (*FakeQuerier) DeleteCoordinator(context.Context, uuid.UUID) error {
 	return ErrUnimplemented
 }
 
+func (q *FakeQuerier) DeleteExternalAuthLink(ctx context.Context, arg database.DeleteExternalAuthLinkParams) error {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return err
+	}
+
+	panic("not implemented")
+}
+
 func (q *FakeQuerier) DeleteGitSSHKey(_ context.Context, userID uuid.UUID) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()

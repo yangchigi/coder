@@ -739,6 +739,12 @@ func (q *querier) DeleteCoordinator(ctx context.Context, id uuid.UUID) error {
 	return q.db.DeleteCoordinator(ctx, id)
 }
 
+func (q *querier) DeleteExternalAuthLink(ctx context.Context, arg database.DeleteExternalAuthLinkParams) error {
+	return deleteQ(q.log, q.auth, func(ctx context.Context, arg database.DeleteExternalAuthLinkParams) (database.ExternalAuthLink, error) {
+		return q.db.GetExternalAuthLink(ctx, database.GetExternalAuthLinkParams{UserID: arg.UserID, ProviderID: arg.ProviderID})
+	}, q.db.DeleteExternalAuthLink)(ctx, arg)
+}
+
 func (q *querier) DeleteGitSSHKey(ctx context.Context, userID uuid.UUID) error {
 	return deleteQ(q.log, q.auth, q.db.GetGitSSHKey, q.db.DeleteGitSSHKey)(ctx, userID)
 }
