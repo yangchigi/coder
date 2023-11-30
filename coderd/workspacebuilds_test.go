@@ -51,9 +51,20 @@ func TestWorkspaceBuild(t *testing.T) {
 	_ = coderdtest.AwaitWorkspaceBuildJobCompleted(t, client, workspace.LatestBuild.ID)
 	// Create workspace will also start a build, so we need to wait for
 	// it to ensure all events are recorded.
-	require.Len(t, auditor.AuditLogs(), 2)
-	require.Equal(t, auditor.AuditLogs()[0].Ip.IPNet.IP.String(), "127.0.0.1")
-	require.Equal(t, auditor.AuditLogs()[1].Ip.IPNet.IP.String(), "127.0.0.1")
+	assert.True(t, auditor.Contains(t, database.AuditLog{
+		Action:       database.AuditActionCreate,
+		ResourceType: database.ResourceTypeWorkspace,
+		ResourceID:   workspace.ID,
+	}, func(al database.AuditLog) bool {
+		return assert.Equal(t, al.Ip.IPNet.IP.String(), "127.0.0.1")
+	}))
+	assert.True(t, auditor.Contains(t, database.AuditLog{
+		Action:       database.AuditActionStart,
+		ResourceType: database.ResourceTypeWorkspaceBuild,
+		ResourceID:   workspace.LatestBuild.ID,
+	}, func(al database.AuditLog) bool {
+		return assert.Equal(t, al.Ip.IPNet.IP.String(), "127.0.0.1")
+	}))
 }
 
 func TestWorkspaceBuildByBuildNumber(t *testing.T) {

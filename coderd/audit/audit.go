@@ -54,6 +54,7 @@ func (a *MockAuditor) ResetLogs() {
 	a.auditLogs = make([]database.AuditLog, 0)
 }
 
+// DEPRECATED: Use Contains instead.
 func (a *MockAuditor) AuditLogs() []database.AuditLog {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -76,7 +77,7 @@ func (*MockAuditor) diff(any, any) Map {
 // Contains returns true if, for each non-zero-valued field in expected,
 // there exists a corresponding audit log in the mock auditor that matches
 // the expected values. Returns false otherwise.
-func (a *MockAuditor) Contains(t testing.TB, expected database.AuditLog) bool {
+func (a *MockAuditor) Contains(t testing.TB, expected database.AuditLog, extra ...func(database.AuditLog) bool) bool {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	for idx, al := range a.auditLogs {
@@ -139,6 +140,13 @@ func (a *MockAuditor) Contains(t testing.TB, expected database.AuditLog) bool {
 		if expected.ResourceIcon != "" && expected.ResourceIcon != al.ResourceIcon {
 			t.Logf("audit log %d: expected ResourceIcon %s, got %s", idx+1, expected.ResourceIcon, al.ResourceIcon)
 			continue
+		}
+		// Check for any additional fields that may have been added to the audit log.
+		for _, f := range extra {
+			if !f(al) {
+				t.Logf("audit log %d: additional field check failed", idx+1)
+				continue
+			}
 		}
 		return true
 	}
