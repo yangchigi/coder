@@ -69,9 +69,14 @@ func (*MockAuditor) Diff(any, any) audit.Map {
 // the expected values. Returns false otherwise.
 func (a *MockAuditor) Contains(t testing.TB, expected database.AuditLog) bool {
 	a.mutex.Lock()
-	defer a.mutex.Unlock()
 	c := make(chan database.AuditLog, bufSize)
 	a.subscribers = append(a.subscribers, c)
+	// Send all existing logs to the new subscriber
+	go func() {
+		for _, al := range a.auditLogs {
+			c <- al
+		}
+	}()
 	a.mutex.Unlock()
 	return MatchAuditLog(t, expected, c)
 }
