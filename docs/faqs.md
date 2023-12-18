@@ -6,7 +6,7 @@ come from our community and enterprise customers, feel free to
 
 ## How do I add an enterprise license?
 
-Visit https://coder.com/trial or contact
+Visit <https://coder.com/trial> or contact
 [sales@coder.com](mailto:sales@coder.com?subject=License) to get a v2 enterprise
 trial key.
 
@@ -83,7 +83,7 @@ of a template and configure as needed:
 
 This example will hide all built-in coder_app icons except the web terminal.
 
-## I want to allow code-server to be accessible by other users in my deployment.
+## I want to allow code-server to be accessible by other users in my deployment
 
 > It is **not** recommended to share a web IDE, but if required, the following
 > deployment environment variable settings are required.
@@ -113,7 +113,7 @@ resource "coder_app" "code-server" {
 }
 ```
 
-## I installed Coder and created a workspace but the icons do not load.
+## I installed Coder and created a workspace but the icons do not load
 
 An important concept to understand is that Coder creates workspaces which have
 an agent that must be able to reach the `coder server`.
@@ -135,9 +135,9 @@ coder server --access-url http://localhost:3000 --address 0.0.0.0:3000
 ```
 
 > Even `coder server` which creates a reverse proxy, will let you use
-> http://localhost to access Coder from a browser.
+> <http://localhost> to access Coder from a browser.
 
-## I updated a template, and an existing workspace based on that template fails to start.
+## I updated a template, and an existing workspace based on that template fails to start
 
 When updating a template, be aware of potential issues with input variables. For
 example, if a template prompts users to choose options like a
@@ -157,7 +157,7 @@ potentially saving the workspace from a failed status.
 coder update --always-prompt <workspace name>
 ```
 
-## I'm running coder on a VM with systemd but latest release installed isn't showing up.
+## I'm running coder on a VM with systemd but latest release installed isn't showing up
 
 Take, for example, a Coder deployment on a VM with a 2 shared vCPU systemd
 service. In this scenario, it's necessary to reload the daemon and then restart
@@ -172,7 +172,7 @@ sudo systemctl daemon-reload
 sudo systemctl restart coder.service
 ```
 
-## I'm using the built-in Postgres database and forgot admin email I set up.
+## I'm using the built-in Postgres database and forgot admin email I set up
 
 1. Run the `coder server` command below to retrieve the `psql` connection URL
    which includes the database user and password.
@@ -204,18 +204,14 @@ can start Caddy as a `systemd` service.
 The Caddyfile configuration will appear like this where `127.0.0.1:3000` is your
 `CODER_ACCESS_URL`:
 
-```text
+```caddyfile
 coder.example.com {
-
   reverse_proxy 127.0.0.1:3000
-
-	tls {
-
-		issuer acme {
-			email user@example.com
-		}
-
-	}
+  tls {
+    issuer acme {
+    email user@example.com
+  }
+ }
 }
 ```
 
@@ -235,16 +231,16 @@ The updated Caddyfile configuration will look like this:
 ```text
 *.coder.example.com, coder.example.com {
 
-	reverse_proxy 127.0.0.1:3000
+ reverse_proxy 127.0.0.1:3000
 
-	tls {
-		issuer acme {
-			email user@example.com
-			dns googleclouddns {
-				gcp_project my-gcp-project
-			}
-		}
-	}
+ tls {
+  issuer acme {
+   email user@example.com
+   dns googleclouddns {
+    gcp_project my-gcp-project
+   }
+  }
+ }
 
 }
 ```
@@ -295,7 +291,7 @@ References:
 ## Can I run Coder in an air-gapped or offline mode? (no Internet)?
 
 Yes, Coder can be deployed in air-gapped or offline mode.
-https://coder.com/docs/v2/latest/install/offline
+<https://coder.com/docs/v2/latest/install/offline>
 
 Our product bundles with the Terraform binary so assume access to terraform.io
 during installation. The docs outline rebuilding the Coder container with
@@ -364,12 +360,12 @@ retrieved there.
 
 Another option is to use VS Code Desktop (local) and that connects to
 Microsoft's marketplace.
-https://github.com/sharkymark/v2-templates/blob/main/vs-code-server/main.tf
+<https://github.com/sharkymark/v2-templates/blob/main/vs-code-server/main.tf>
 
 > Note: these are example templates with no SLAs on them and are not guaranteed
 > for long-term support.
 
-## I want to run Docker for my workspaces but not install Docker Desktop.
+## I want to run Docker for my workspaces but not install Docker Desktop
 
 [Colima](https://github.com/abiosoft/colima) is a Docker Desktop alternative.
 
