@@ -22,6 +22,11 @@
       "icon_path": "./images/icons/download.svg",
       "children": [
         {
+          "title": "Local installation",
+          "description": "One-line install script for macOS and Linux",
+          "path": "./install/local.md"
+        },
+        {
           "title": "Install script",
           "description": "One-line install script for macOS and Linux",
           "path": "./install/install.sh.md"
