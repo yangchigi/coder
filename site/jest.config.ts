@@ -69,4 +69,5 @@ module.exports = {
     "!<rootDir>/out/**/*.*",
     "!<rootDir>/storybook-static/**/*.*",
   ],
+  coverageDirectory: "<rootDir>/test-results",
 };
