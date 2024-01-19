@@ -11,6 +11,7 @@ import {
   type WorkspacesRequest,
   WorkspaceBuild,
   ProvisionerLogLevel,
+  JFrogXrayScan,
 } from "api/typesGenerated";
 import { workspaceBuildsKey } from "./workspaceBuilds";
 
@@ -235,6 +236,31 @@ export const activate = (workspace: Workspace, queryClient: QueryClient) => {
       queryClient.setQueryData(
         workspaceByOwnerAndNameKey(workspace.owner_name, workspace.name),
         updatedWorkspace,
+      );
+    },
+  };
+};
+
+export const jfrogResultsByWorkspaceOwnerAndName = (
+  owner: string,
+  name: string,
+) => ["workspace", owner, name, "xray-results"];
+
+export const getJFrogXrayResults = (
+  workspace: Workspace,
+  queryClient: QueryClient,
+) => {
+  return {
+    mutationFn: () => {
+      return API.fetchJFrogXrayResults(workspace.id);
+    },
+    onSuccess: (results: JFrogXrayScan) => {
+      queryClient.setQueryData(
+        jfrogResultsByWorkspaceOwnerAndName(
+          workspace.owner_name,
+          workspace.name,
+        ),
+        results,
       );
     },
   };

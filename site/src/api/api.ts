@@ -1688,3 +1688,15 @@ export const updateHealthSettings = async (
   );
   return response.data;
 };
+
+export const fetchJFrogXrayResults = async (
+  workspaceID: string,
+): Promise<TypesGen.JFrogXrayScan> => {
+  const resp = await axios.get<TypesGen.JFrogXrayScan>(
+    `api/v2/exp/jfrog/xray-results`,
+    {
+      params: "workspace_id=" + workspaceID,
+    },
+  );
+  return resp.data;
+};

@@ -15,6 +15,7 @@ import { watchWorkspace } from "api/api";
 import { Workspace } from "api/typesGenerated";
 import { useEffectEvent } from "hooks/hookPolyfills";
 import { Navbar } from "components/Dashboard/Navbar/Navbar";
+import { SeverityWarningProvider } from "components/Resources/SeverityWarning";
 
 export const WorkspacePage: FC = () => {
   const queryClient = useQueryClient();
@@ -116,11 +117,13 @@ export const WorkspacePage: FC = () => {
       ) : isLoading ? (
         <Loader />
       ) : (
-        <WorkspaceReadyPage
-          workspace={workspace}
-          template={template}
-          permissions={permissions}
-        />
+        <SeverityWarningProvider>
+          <WorkspaceReadyPage
+            workspace={workspace}
+            template={template}
+            permissions={permissions}
+          />
+        </SeverityWarningProvider>
       )}
     </div>
   );
