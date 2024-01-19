@@ -1779,6 +1779,11 @@ type GroupMember struct {
 	GroupID uuid.UUID `db:"group_id" json:"group_id"`
 }
 
+type JfrogXray struct {
+	WorkspaceID uuid.UUID       `db:"workspace_id" json:"workspace_id"`
+	Payload     json.RawMessage `db:"payload" json:"payload"`
+}
+
 type License struct {
 	ID         int32     `db:"id" json:"id"`
 	UploadedAt time.Time `db:"uploaded_at" json:"uploaded_at"`

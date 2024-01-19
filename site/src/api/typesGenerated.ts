@@ -607,6 +607,14 @@ export interface IssueReconnectingPTYSignedTokenResponse {
   readonly signed_token: string;
 }
 
+// From codersdk/jfrog.go
+export interface JFrogXrayScan {
+  readonly uuid: string;
+  readonly critical: number;
+  readonly high: number;
+  readonly results_url: string;
+}
+
 // From codersdk/licenses.go
 export interface License {
   readonly id: number;

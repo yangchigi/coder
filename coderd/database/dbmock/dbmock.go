@@ -1055,6 +1055,21 @@ func (mr *MockStoreMockRecorder) GetHungProvisionerJobs(arg0, arg1 any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHungProvisionerJobs", reflect.TypeOf((*MockStore)(nil).GetHungProvisionerJobs), arg0, arg1)
 }
 
+// GetJFrogXrayScanByWorkspaceID mocks base method.
+func (m *MockStore) GetJFrogXrayScanByWorkspaceID(arg0 context.Context, arg1 uuid.UUID) (database.JfrogXray, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetJFrogXrayScanByWorkspaceID", arg0, arg1)
+	ret0, _ := ret[0].(database.JfrogXray)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetJFrogXrayScanByWorkspaceID indicates an expected call of GetJFrogXrayScanByWorkspaceID.
+func (mr *MockStoreMockRecorder) GetJFrogXrayScanByWorkspaceID(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetJFrogXrayScanByWorkspaceID", reflect.TypeOf((*MockStore)(nil).GetJFrogXrayScanByWorkspaceID), arg0, arg1)
+}
+
 // GetLastUpdateCheck mocks base method.
 func (m *MockStore) GetLastUpdateCheck(arg0 context.Context) (string, error) {
 	m.ctrl.T.Helper()
@@ -2878,6 +2893,20 @@ func (m *MockStore) InsertGroupMember(arg0 context.Context, arg1 database.Insert
 func (mr *MockStoreMockRecorder) InsertGroupMember(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertGroupMember", reflect.TypeOf((*MockStore)(nil).InsertGroupMember), arg0, arg1)
+}
+
+// InsertJFrogXrayScanByWorkspaceID mocks base method.
+func (m *MockStore) InsertJFrogXrayScanByWorkspaceID(arg0 context.Context, arg1 database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertJFrogXrayScanByWorkspaceID", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertJFrogXrayScanByWorkspaceID indicates an expected call of InsertJFrogXrayScanByWorkspaceID.
+func (mr *MockStoreMockRecorder) InsertJFrogXrayScanByWorkspaceID(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertJFrogXrayScanByWorkspaceID", reflect.TypeOf((*MockStore)(nil).InsertJFrogXrayScanByWorkspaceID), arg0, arg1)
 }
 
 // InsertLicense mocks base method.

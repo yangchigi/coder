@@ -1966,6 +1966,10 @@ func (q *FakeQuerier) GetHungProvisionerJobs(_ context.Context, hungSince time.T
 	return hungJobs, nil
 }
 
+func (q *FakeQuerier) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (database.JfrogXray, error) {
+	panic("not implemented")
+}
+
 func (q *FakeQuerier) GetLastUpdateCheck(_ context.Context) (string, error) {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
@@ -5010,6 +5014,15 @@ func (q *FakeQuerier) InsertGroupMember(_ context.Context, arg database.InsertGr
 	})
 
 	return nil
+}
+
+func (q *FakeQuerier) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return err
+	}
+
+	panic("not implemented")
 }
 
 func (q *FakeQuerier) InsertLicense(

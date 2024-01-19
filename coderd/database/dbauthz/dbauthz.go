@@ -1104,6 +1104,15 @@ func (q *querier) GetHungProvisionerJobs(ctx context.Context, hungSince time.Tim
 	return q.db.GetHungProvisionerJobs(ctx, hungSince)
 }
 
+func (q *querier) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (database.JfrogXray, error) {
+	// An owner or anyone with workspace 'read' permissions should be able
+	// to fetch scan results.
+	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceWorkspace); err != nil {
+		return database.JfrogXray{}, err
+	}
+	return q.db.GetJFrogXrayScanByWorkspaceID(ctx, workspaceID)
+}
+
 func (q *querier) GetLastUpdateCheck(ctx context.Context) (string, error) {
 	if err := q.authorizeContext(ctx, rbac.ActionRead, rbac.ResourceSystem); err != nil {
 		return "", err
@@ -2180,6 +2189,16 @@ func (q *querier) InsertGroupMember(ctx context.Context, arg database.InsertGrou
 		return q.db.GetGroupByID(ctx, arg.GroupID)
 	}
 	return update(q.log, q.auth, fetch, q.db.InsertGroupMember)(ctx, arg)
+}
+
+func (q *querier) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+	// Only template admins should be able to write JFrog Xray scans to a workspace.
+	// We don't want this to be a workspace-level permission because then users
+	// could overwrite their own results.
+	if err := q.authorizeContext(ctx, rbac.ActionCreate, rbac.ResourceTemplate); err != nil {
+		return err
+	}
+	return q.db.InsertJFrogXrayScanByWorkspaceID(ctx, arg)
 }
 
 func (q *querier) InsertLicense(ctx context.Context, arg database.InsertLicenseParams) (database.License, error) {

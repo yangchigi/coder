@@ -2438,6 +2438,44 @@ func (q *sqlQuerier) GetUserLatencyInsights(ctx context.Context, arg GetUserLate
 	return items, nil
 }
 
+const getJFrogXrayScanByWorkspaceID = `-- name: GetJFrogXrayScanByWorkspaceID :one
+SELECT
+	workspace_id, payload
+FROM
+	jfrog_xray
+WHERE
+	workspace_id = $1
+LIMIT
+	1
+`
+
+func (q *sqlQuerier) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (JfrogXray, error) {
+	row := q.db.QueryRowContext(ctx, getJFrogXrayScanByWorkspaceID, workspaceID)
+	var i JfrogXray
+	err := row.Scan(&i.WorkspaceID, &i.Payload)
+	return i, err
+}
+
+const insertJFrogXrayScanByWorkspaceID = `-- name: InsertJFrogXrayScanByWorkspaceID :exec
+INSERT INTO 
+	jfrog_xray (
+		workspace_id,
+		payload
+	)
+VALUES 
+	($1, $2)
+`
+
+type InsertJFrogXrayScanByWorkspaceIDParams struct {
+	WorkspaceID uuid.UUID       `db:"workspace_id" json:"workspace_id"`
+	Payload     json.RawMessage `db:"payload" json:"payload"`
+}
+
+func (q *sqlQuerier) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg InsertJFrogXrayScanByWorkspaceIDParams) error {
+	_, err := q.db.ExecContext(ctx, insertJFrogXrayScanByWorkspaceID, arg.WorkspaceID, arg.Payload)
+	return err
+}
+
 const deleteLicense = `-- name: DeleteLicense :one
 DELETE
 FROM licenses

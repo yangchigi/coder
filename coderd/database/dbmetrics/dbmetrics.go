@@ -538,6 +538,13 @@ func (m metricsStore) GetHungProvisionerJobs(ctx context.Context, hungSince time
 	return jobs, err
 }
 
+func (m metricsStore) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (database.JfrogXray, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetJFrogXrayScanByWorkspaceID(ctx, workspaceID)
+	m.queryLatencies.WithLabelValues("GetJFrogXrayScanByWorkspaceID").Observe(time.Since(start).Seconds())
+	return r0, r1
+}
+
 func (m metricsStore) GetLastUpdateCheck(ctx context.Context) (string, error) {
 	start := time.Now()
 	version, err := m.s.GetLastUpdateCheck(ctx)
@@ -1367,6 +1374,13 @@ func (m metricsStore) InsertGroupMember(ctx context.Context, arg database.Insert
 	err := m.s.InsertGroupMember(ctx, arg)
 	m.queryLatencies.WithLabelValues("InsertGroupMember").Observe(time.Since(start).Seconds())
 	return err
+}
+
+func (m metricsStore) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+	start := time.Now()
+	r0 := m.s.InsertJFrogXrayScanByWorkspaceID(ctx, arg)
+	m.queryLatencies.WithLabelValues("InsertJFrogXrayScanByWorkspaceID").Observe(time.Since(start).Seconds())
+	return r0
 }
 
 func (m metricsStore) InsertLicense(ctx context.Context, arg database.InsertLicenseParams) (database.License, error) {
