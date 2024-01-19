@@ -79,11 +79,11 @@ func newConfigMaps(logger slog.Logger, engine engineConfigurable, nodeID tailcfg
 		logger: logger,
 		engine: engine,
 		static: netmap.NetworkMap{
-			SelfNode: &tailcfg.Node{
+			SelfNode: (&tailcfg.Node{
 				ID:       nodeID,
 				Key:      pubKey,
 				DiscoKey: discoKey,
-			},
+			}).View(),
 			NodeKey:    pubKey,
 			PrivateKey: nodeKey,
 			PacketFilter: []filter.Match{{

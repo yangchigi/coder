@@ -60,7 +60,7 @@ func WithWebsocketSupport(s *derp.Server, base http.Handler) (http.Handler, func
 				c.Close(websocket.StatusPolicyViolation, "client must speak the derp subprotocol")
 				return
 			}
-			wc := wsconn.NetConn(ctx, c, websocket.MessageBinary)
+			wc := wsconn.NetConn(ctx, c, websocket.MessageBinary, r.RemoteAddr)
 			brw := bufio.NewReadWriter(bufio.NewReader(wc), bufio.NewWriter(wc))
 			s.Accept(ctx, wc, brw, r.RemoteAddr)
 		}), func() {

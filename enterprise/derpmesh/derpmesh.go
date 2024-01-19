@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"net/netip"
 	"net/url"
 	"sync"
 
@@ -123,7 +124,7 @@ func (m *Mesh) addAddress(address string, connect bool) (bool, error) {
 	m.active[address] = closeFunc
 	go func() {
 		defer close(closed)
-		client.RunWatchConnectionLoop(ctx, m.server.PublicKey(), tailnet.Logger(m.logger.Named("loop")), func(np key.NodePublic) {
+		client.RunWatchConnectionLoop(ctx, m.server.PublicKey(), tailnet.Logger(m.logger.Named("loop")), func(np key.NodePublic, _ netip.AddrPort) {
 			m.server.AddPacketForwarder(np, client)
 		}, func(np key.NodePublic) {
 			m.server.RemovePacketForwarder(np, client)

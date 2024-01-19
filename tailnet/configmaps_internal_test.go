@@ -41,7 +41,7 @@ func TestConfigMaps_setAddresses_different(t *testing.T) {
 	uut.setAddresses(addrs)
 
 	nm := testutil.RequireRecvCtx(ctx, t, fEng.setNetworkMap)
-	require.Equal(t, addrs, nm.Addresses)
+	require.Equal(t, addrs, nm.GetAddresses().AsSlice())
 
 	// here were in the middle of a reconfig, blocked on a channel write to fEng.reconfig
 	locked := uut.L.(*sync.Mutex).TryLock()
@@ -66,7 +66,7 @@ func TestConfigMaps_setAddresses_different(t *testing.T) {
 
 	// we should get another round of configurations from the second set of addrs
 	nm = testutil.RequireRecvCtx(ctx, t, fEng.setNetworkMap)
-	require.Equal(t, addrs2, nm.Addresses)
+	require.Equal(t, addrs2, nm.GetAddresses().AsSlice())
 	r = testutil.RequireRecvCtx(ctx, t, fEng.reconfig)
 	require.Equal(t, addrs2, r.wg.Addresses)
 	require.Equal(t, addrs2, r.router.LocalAddrs)
@@ -167,11 +167,11 @@ func TestConfigMaps_updatePeers_new(t *testing.T) {
 	n1 := getNodeWithID(t, nm.Peers, 1)
 	require.Equal(t, "127.3.3.40:1", n1.DERP)
 	require.Equal(t, p1Node.Endpoints, n1.Endpoints)
-	require.True(t, n1.KeepAlive)
+	require.True(t, n1.KeepAlive())
 	n2 := getNodeWithID(t, nm.Peers, 2)
 	require.Equal(t, "127.3.3.40:2", n2.DERP)
 	require.Equal(t, p2Node.Endpoints, n2.Endpoints)
-	require.False(t, n2.KeepAlive)
+	require.False(t, n2.KeepAlive())
 
 	// we rely on nmcfg.WGCfg() to convert the netmap to wireguard config, so just
 	// require the right number of peers.
@@ -747,15 +747,15 @@ func newTestNode(id int) *Node {
 	}
 }
 
-func getNodeWithID(t testing.TB, peers []*tailcfg.Node, id tailcfg.NodeID) *tailcfg.Node {
+func getNodeWithID(t testing.TB, peers []tailcfg.NodeView, id tailcfg.NodeID) tailcfg.NodeView {
 	t.Helper()
 	for _, n := range peers {
-		if n.ID == id {
+		if n.ID() == id {
 			return n
 		}
 	}
 	t.Fatal()
-	return nil
+	return tailcfg.NodeView{}
 }
 
 func requireNeverConfigures(ctx context.Context, t *testing.T, uut *phased) {

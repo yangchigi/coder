@@ -147,10 +147,10 @@ func (r *Report) Run(ctx context.Context, opts *ReportOptions) {
 		mu.Unlock()
 	}
 	nc := &netcheck.Client{
-		PortMapper: portmapper.NewClient(tslogger.WithPrefix(ncLogf, "portmap: "), nil, nil, nil),
+		PortMapper: portmapper.NewClient(tslogger.WithPrefix(ncLogf, "portmap: "), nil, nil, nil, nil),
 		Logf:       tslogger.WithPrefix(ncLogf, "netcheck: "),
 	}
-	ncReport, netcheckErr := nc.GetReport(ctx, opts.DERPMap)
+	ncReport, netcheckErr := nc.GetReport(ctx, opts.DERPMap, nil)
 	r.Netcheck = ncReport
 	r.NetcheckErr = convertError(netcheckErr)
 
