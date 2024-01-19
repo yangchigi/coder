@@ -200,7 +200,7 @@ func TestDialCoordinator(t *testing.T) {
 			DERPForcedWebsocket: map[int]string{},
 			Addresses:           []netip.Prefix{netip.PrefixFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4}), 128)},
 			AllowedIPs:          []netip.Prefix{netip.PrefixFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4}), 128)},
-			Endpoints:           []string{"192.168.1.1:18842"},
+			Endpoints:           []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:18842")},
 		}}
 		sendNode := make(chan struct{})
 

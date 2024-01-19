@@ -35,6 +35,7 @@ import (
 	tslogger "tailscale.com/types/logger"
 	"tailscale.com/types/netlogtype"
 	"tailscale.com/types/netmap"
+	"tailscale.com/types/views"
 	"tailscale.com/wgengine"
 	"tailscale.com/wgengine/filter"
 	"tailscale.com/wgengine/magicsock"
@@ -134,7 +135,6 @@ func NewConn(options *Options) (conn *Conn, err error) {
 		DERPMap:    options.DERPMap,
 		NodeKey:    nodePublicKey,
 		PrivateKey: nodePrivateKey,
-		Addresses:  options.Addresses,
 		PacketFilter: []filter.Match{{
 			// Allow any protocol!
 			IPProto: []ipproto.Proto{ipproto.TCP, ipproto.UDP, ipproto.ICMPv4, ipproto.ICMPv6, ipproto.SCTP},
@@ -178,12 +178,13 @@ func NewConn(options *Options) (conn *Conn, err error) {
 	}
 
 	// This is used by functions below to identify the node via key
-	netMap.SelfNode = &tailcfg.Node{
+	selfNode := &tailcfg.Node{
 		ID:         nodeID,
 		Key:        nodePublicKey,
 		Addresses:  options.Addresses,
 		AllowedIPs: options.Addresses,
 	}
+	netMap.SelfNode = selfNode.View()
 
 	wireguardMonitor, err := netmon.New(Logger(options.Logger.Named("net.wgmonitor")))
 	if err != nil {
@@ -243,7 +244,7 @@ func NewConn(options *Options) (conn *Conn, err error) {
 	if err != nil {
 		return nil, xerrors.Errorf("set node private key: %w", err)
 	}
-	netMap.SelfNode.DiscoKey = magicConn.DiscoPublicKey()
+	selfNode.DiscoKey = magicConn.DiscoPublicKey()
 
 	netStack, err := netstack.Create(
 		Logger(options.Logger.Named("net.netstack")),
@@ -252,6 +253,7 @@ func NewConn(options *Options) (conn *Conn, err error) {
 		magicConn,
 		dialer,
 		sys.DNSManager.Get(),
+		sys.ProxyMapper(),
 	)
 	if err != nil {
 		return nil, xerrors.Errorf("create netstack: %w", err)
@@ -262,13 +264,13 @@ func NewConn(options *Options) (conn *Conn, err error) {
 	}
 	netStack.ProcessLocalIPs = true
 	wireguardEngine = wgengine.NewWatchdog(wireguardEngine)
-	wireguardEngine.SetDERPMap(options.DERPMap)
+	magicConn.SetDERPMap(options.DERPMap)
 	netMapCopy := *netMap
 	options.Logger.Debug(context.Background(), "updating network map")
 	wireguardEngine.SetNetworkMap(&netMapCopy)
 
 	localIPSet := netipx.IPSetBuilder{}
-	for _, addr := range netMap.Addresses {
+	for _, addr := range netMap.GetAddresses().AsSlice() {
 		localIPSet.AddPrefix(addr)
 	}
 	localIPs, _ := localIPSet.IPSet()
@@ -297,7 +299,7 @@ func NewConn(options *Options) (conn *Conn, err error) {
 		netStack:                 netStack,
 		wireguardMonitor:         wireguardMonitor,
 		wireguardRouter: &router.Config{
-			LocalAddrs: netMap.Addresses,
+			LocalAddrs: netMap.GetAddresses().AsSlice(),
 		},
 		wireguardEngine: wireguardEngine,
 	}
@@ -329,7 +331,7 @@ func NewConn(options *Options) (conn *Conn, err error) {
 		server.sendNode()
 	})
 
-	wireguardEngine.SetNetInfoCallback(func(ni *tailcfg.NetInfo) {
+	magicConn.SetNetInfoCallback(func(ni *tailcfg.NetInfo) {
 		server.logger.Debug(context.Background(), "netinfo callback", slog.F("netinfo", ni))
 		server.lastMutex.Lock()
 		if reflect.DeepEqual(server.lastNetInfo, ni) {
@@ -428,9 +430,10 @@ func (c *Conn) SetAddresses(ips []netip.Prefix) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	c.netMap.Addresses = ips
-
+	selfNode := c.netMap.SelfNode.AsStruct()
+	selfNode.Addresses = ips
 	netMapCopy := *c.netMap
+	netMapCopy.SelfNode = selfNode.View()
 	c.logger.Debug(context.Background(), "updating network map")
 	c.wireguardEngine.SetNetworkMap(&netMapCopy)
 	err := c.reconfig()
@@ -441,10 +444,10 @@ func (c *Conn) SetAddresses(ips []netip.Prefix) error {
 	return nil
 }
 
-func (c *Conn) Addresses() []netip.Prefix {
+func (c *Conn) Addresses() views.Slice[netip.Prefix] {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	return c.netMap.Addresses
+	return c.netMap.GetAddresses()
 }
 
 func (c *Conn) SetNodeCallback(callback func(node *Node)) {
@@ -459,7 +462,7 @@ func (c *Conn) SetDERPMap(derpMap *tailcfg.DERPMap) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	c.logger.Debug(context.Background(), "updating derp map", slog.F("derp_map", derpMap))
-	c.wireguardEngine.SetDERPMap(derpMap)
+	c.magicConn.SetDERPMap(derpMap)
 	c.netMap.DERPMap = derpMap
 	netMapCopy := *c.netMap
 	c.logger.Debug(context.Background(), "updating network map")
@@ -498,17 +501,17 @@ func (c *Conn) UpdateNodes(nodes []*Node, replacePeers bool) error {
 
 	status := c.Status()
 	if replacePeers {
-		c.netMap.Peers = []*tailcfg.Node{}
+		c.netMap.Peers = []tailcfg.NodeView{}
 		c.peerMap = map[tailcfg.NodeID]*tailcfg.Node{}
 	}
 	for _, peer := range c.netMap.Peers {
-		peerStatus, ok := status.Peer[peer.Key]
+		peerStatus, ok := status.Peer[peer.Key()]
 		if !ok {
 			continue
 		}
 		// If this peer was added in the last 5 minutes, assume it
 		// could still be active.
-		if time.Since(peer.Created) < 5*time.Minute {
+		if time.Since(peer.Created()) < 5*time.Minute {
 			continue
 		}
 		// We double-check that it's safe to remove by ensuring no
@@ -521,7 +524,7 @@ func (c *Conn) UpdateNodes(nodes []*Node, replacePeers bool) error {
 		c.logger.Debug(context.Background(), "removing peer, last handshake >5m ago",
 			slog.F("peer", peer.Key), slog.F("last_handshake", peerStatus.LastHandshake),
 		)
-		delete(c.peerMap, peer.ID)
+		delete(c.peerMap, peer.ID())
 	}
 
 	for _, node := range nodes {
@@ -560,9 +563,9 @@ func (c *Conn) UpdateNodes(nodes []*Node, replacePeers bool) error {
 		c.peerMap[node.ID] = peerNode
 	}
 
-	c.netMap.Peers = make([]*tailcfg.Node, 0, len(c.peerMap))
+	c.netMap.Peers = make([]tailcfg.NodeView, 0, len(c.peerMap))
 	for _, peer := range c.peerMap {
-		c.netMap.Peers = append(c.netMap.Peers, peer.Clone())
+		c.netMap.Peers = append(c.netMap.Peers, peer.View())
 	}
 
 	netMapCopy := *c.netMap
@@ -610,9 +613,9 @@ func (c *Conn) RemovePeer(selector PeerSelector) (deleted bool, err error) {
 		return false, nil
 	}
 
-	c.netMap.Peers = make([]*tailcfg.Node, 0, len(c.peerMap))
+	c.netMap.Peers = make([]tailcfg.NodeView, 0, len(c.peerMap))
 	for _, peer := range c.peerMap {
-		c.netMap.Peers = append(c.netMap.Peers, peer.Clone())
+		c.netMap.Peers = append(c.netMap.Peers, peer.View())
 	}
 
 	netMapCopy := *c.netMap
@@ -632,7 +635,7 @@ func (c *Conn) reconfig() error {
 		return xerrors.Errorf("update wireguard config: %w", err)
 	}
 
-	err = c.wireguardEngine.Reconfig(cfg, c.wireguardRouter, &dns.Config{}, &tailcfg.Debug{})
+	err = c.wireguardEngine.Reconfig(cfg, c.wireguardRouter, &dns.Config{})
 	if err != nil {
 		if c.isClosed() {
 			return nil
@@ -647,15 +650,15 @@ func (c *Conn) reconfig() error {
 }
 
 // NodeAddresses returns the addresses of a node from the NetworkMap.
-func (c *Conn) NodeAddresses(publicKey key.NodePublic) ([]netip.Prefix, bool) {
+func (c *Conn) NodeAddresses(publicKey key.NodePublic) (views.Slice[netip.Prefix], bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	for _, node := range c.netMap.Peers {
-		if node.Key == publicKey {
-			return node.Addresses, true
+		if node.Key() == publicKey {
+			return node.Addresses(), true
 		}
 	}
-	return nil, false
+	return views.Slice[netip.Prefix]{}, false
 }
 
 // Status returns the current ipnstate of a connection.
@@ -670,7 +673,7 @@ func (c *Conn) Status() *ipnstate.Status {
 func (c *Conn) Ping(ctx context.Context, ip netip.Addr) (time.Duration, bool, *ipnstate.PingResult, error) {
 	errCh := make(chan error, 1)
 	prChan := make(chan *ipnstate.PingResult, 1)
-	go c.wireguardEngine.Ping(ip, tailcfg.PingTSMP, func(pr *ipnstate.PingResult) {
+	go c.wireguardEngine.Ping(ip, tailcfg.PingTSMP, 0, func(pr *ipnstate.PingResult) {
 		if pr.Err != "" {
 			errCh <- xerrors.New(pr.Err)
 			return
@@ -852,9 +855,9 @@ func (c *Conn) Node() *Node {
 }
 
 func (c *Conn) selfNode() *Node {
-	endpoints := make([]string, 0, len(c.lastEndpoints))
+	endpoints := make([]netip.AddrPort, 0, len(c.lastEndpoints))
 	for _, addr := range c.lastEndpoints {
-		endpoints = append(endpoints, addr.Addr.String())
+		endpoints = append(endpoints, addr.Addr)
 	}
 	var preferredDERP int
 	var derpLatency map[string]float64
@@ -876,11 +879,11 @@ func (c *Conn) selfNode() *Node {
 	}
 
 	node := &Node{
-		ID:                  c.netMap.SelfNode.ID,
+		ID:                  c.netMap.SelfNode.ID(),
 		AsOf:                dbtime.Now(),
-		Key:                 c.netMap.SelfNode.Key,
-		Addresses:           c.netMap.SelfNode.Addresses,
-		AllowedIPs:          c.netMap.SelfNode.AllowedIPs,
+		Key:                 c.netMap.SelfNode.Key(),
+		Addresses:           c.netMap.SelfNode.Addresses().AsSlice(),
+		AllowedIPs:          c.netMap.SelfNode.AllowedIPs().AsSlice(),
 		DiscoKey:            c.magicConn.DiscoPublicKey(),
 		Endpoints:           endpoints,
 		PreferredDERP:       preferredDERP,

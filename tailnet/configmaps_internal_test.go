@@ -742,7 +742,7 @@ func newTestNode(id int) *Node {
 		AsOf:          time.Date(2024, 1, 7, 12, 13, 14, 15, time.UTC),
 		Key:           key.NewNode().Public(),
 		DiscoKey:      key.NewDisco().Public(),
-		Endpoints:     []string{"192.168.0.55"},
+		Endpoints:     []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:18842")},
 		PreferredDERP: id,
 	}
 }

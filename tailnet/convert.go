@@ -48,6 +48,14 @@ func NodeToProto(n *Node) (*proto.Node, error) {
 		}
 		allowedIPs[i] = string(s)
 	}
+	endpoints := make([]string, len(n.Endpoints))
+	for i, endpoint := range n.AllowedIPs {
+		s, err := endpoint.MarshalText()
+		if err != nil {
+			return nil, err
+		}
+		endpoints[i] = string(s)
+	}
 	return &proto.Node{
 		Id:                  int64(n.ID),
 		AsOf:                timestamppb.New(n.AsOf),
@@ -58,7 +66,7 @@ func NodeToProto(n *Node) (*proto.Node, error) {
 		DerpForcedWebsocket: derpForcedWebsocket,
 		Addresses:           addresses,
 		AllowedIps:          allowedIPs,
-		Endpoints:           n.Endpoints,
+		Endpoints:           endpoints,
 	}, nil
 }
 
@@ -91,6 +99,14 @@ func ProtoToNode(p *proto.Node) (*Node, error) {
 			return nil, err
 		}
 	}
+	endpoints := make([]netip.AddrPort, len(p.GetEndpoints()))
+	for i, endpoint := range p.GetEndpoints() {
+		err = endpoints[i].UnmarshalText([]byte(endpoint))
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &Node{
 		ID:                  tailcfg.NodeID(p.GetId()),
 		AsOf:                p.GetAsOf().AsTime(),
@@ -101,7 +117,7 @@ func ProtoToNode(p *proto.Node) (*Node, error) {
 		DERPForcedWebsocket: derpForcedWebsocket,
 		Addresses:           addresses,
 		AllowedIPs:          allowedIPs,
-		Endpoints:           p.Endpoints,
+		Endpoints:           endpoints,
 	}, nil
 }
 

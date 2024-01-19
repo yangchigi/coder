@@ -266,7 +266,7 @@ func TestNodeUpdater_setStatus_same(t *testing.T) {
 	//        endpoints set to {"[fe80::1]:5678"}
 	uut.L.Lock()
 	uut.preferredDERP = 1
-	uut.endpoints = []string{"[fe80::1]:5678"}
+	uut.endpoints = []netip.AddrPort{netip.MustParseAddrPort("[fe80::1]:5678")}
 	uut.L.Unlock()
 
 	// When: we set a status with endpoints {[fe80::1]:5678}
@@ -503,7 +503,7 @@ func TestNodeUpdater_setBlockEndpoints_different(t *testing.T) {
 	// Given: preferred DERP is 1, so we'll send an update && some endpoints
 	uut.L.Lock()
 	uut.preferredDERP = 1
-	uut.endpoints = []string{"10.11.12.13:7890"}
+	uut.endpoints = []netip.AddrPort{netip.MustParseAddrPort("10.11.12.13:7890")}
 	uut.L.Unlock()
 
 	// When: we setBlockEndpoints

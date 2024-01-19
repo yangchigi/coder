@@ -1225,13 +1225,13 @@ func (a *agent) startReportingConnectionStats(ctx context.Context) {
 			if !found {
 				continue
 			}
-			if len(addresses) == 0 {
+			if addresses.Len() == 0 {
 				continue
 			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				duration, _, _, err := a.network.Ping(pingCtx, addresses[0].Addr())
+				duration, _, _, err := a.network.Ping(pingCtx, addresses.At(0).Addr())
 				if err != nil {
 					return
 				}

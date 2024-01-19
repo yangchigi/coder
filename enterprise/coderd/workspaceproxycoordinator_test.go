@@ -66,7 +66,7 @@ func Test_agentIsLegacy(t *testing.T) {
 			DERPForcedWebsocket: map[int]string{},
 			Addresses:           []netip.Prefix{netip.PrefixFrom(codersdk.WorkspaceAgentIP, 128)},
 			AllowedIPs:          []netip.Prefix{netip.PrefixFrom(codersdk.WorkspaceAgentIP, 128)},
-			Endpoints:           []string{"192.168.1.1:18842"},
+			Endpoints:           []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:18842")},
 		}))
 		require.Eventually(t, func() bool {
 			return coordinator.Node(nodeID) != nil
@@ -126,7 +126,7 @@ func Test_agentIsLegacy(t *testing.T) {
 			DERPForcedWebsocket: map[int]string{},
 			Addresses:           []netip.Prefix{netip.PrefixFrom(agpl.IPFromUUID(nodeID), 128)},
 			AllowedIPs:          []netip.Prefix{netip.PrefixFrom(agpl.IPFromUUID(nodeID), 128)},
-			Endpoints:           []string{"192.168.1.1:18842"},
+			Endpoints:           []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:18842")},
 		}))
 		require.Eventually(t, func() bool {
 			return coordinator.Node(nodeID) != nil

@@ -49,9 +49,9 @@ func TestNode(t *testing.T) {
 					netip.MustParsePrefix("10.0.0.0/8"),
 					netip.MustParsePrefix("ff80::aa:1/128"),
 				},
-				Endpoints: []string{
-					"192.168.0.1:3305",
-					"[ff80::aa:1]:2049",
+				Endpoints: []netip.AddrPort{
+					netip.MustParseAddrPort("192.168.0.1:3305"),
+					netip.MustParseAddrPort("[ff80::aa:1]:2049"),
 				},
 			},
 		},

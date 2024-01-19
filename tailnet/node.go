@@ -32,7 +32,7 @@ type nodeUpdater struct {
 	preferredDERP        int
 	derpLatency          map[string]float64
 	derpForcedWebsockets map[int]string
-	endpoints            []string
+	endpoints            []netip.AddrPort
 	addresses            []netip.Prefix
 	lastStatus           time.Time
 	blockEndpoints       bool
@@ -112,7 +112,7 @@ func newNodeUpdater(
 
 // nodeLocked returns the current best node information.  u.L must be held.
 func (u *nodeUpdater) nodeLocked() *Node {
-	var endpoints []string
+	var endpoints []netip.AddrPort
 	if !u.blockEndpoints {
 		endpoints = slices.Clone(u.endpoints)
 	}
@@ -179,9 +179,9 @@ func (u *nodeUpdater) setStatus(s *wgengine.Status, err error) {
 		return
 	}
 	u.lastStatus = s.AsOf
-	endpoints := make([]string, len(s.LocalAddrs))
+	endpoints := make([]netip.AddrPort, len(s.LocalAddrs))
 	for i, ep := range s.LocalAddrs {
-		endpoints[i] = ep.Addr.String()
+		endpoints[i] = ep.Addr
 	}
 	if slices.Equal(endpoints, u.endpoints) {
 		// No need to update the node if nothing changed!

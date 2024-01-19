@@ -200,25 +200,27 @@ func (c *configMaps) netMapLocked() *netmap.NetworkMap {
 	nm := new(netmap.NetworkMap)
 	*nm = c.static
 
-	nm.Addresses = make([]netip.Prefix, len(c.addresses))
-	copy(nm.Addresses, c.addresses)
+	addrs := make([]netip.Prefix, len(c.addresses))
+	copy(addrs, c.addresses)
 
 	nm.DERPMap = DERPMapFromProto(c.derpMap)
 	nm.Peers = c.peerConfigLocked()
-	nm.SelfNode.Addresses = nm.Addresses
-	nm.SelfNode.AllowedIPs = nm.Addresses
+	selfNode := nm.SelfNode.AsStruct()
+	selfNode.Addresses = addrs
+	selfNode.AllowedIPs = addrs
+	nm.SelfNode = selfNode.View()
 	return nm
 }
 
 // peerConfigLocked returns the set of peer nodes we have.  c.L must be held.
-func (c *configMaps) peerConfigLocked() []*tailcfg.Node {
-	out := make([]*tailcfg.Node, 0, len(c.peers))
+func (c *configMaps) peerConfigLocked() []tailcfg.NodeView {
+	out := make([]tailcfg.NodeView, 0, len(c.peers))
 	for _, p := range c.peers {
 		n := p.node.Clone()
 		if c.blockEndpoints {
 			n.Endpoints = nil
 		}
-		out = append(out, n)
+		out = append(out, n.View())
 	}
 	return out
 }
@@ -288,7 +290,7 @@ func (c *configMaps) reconfig(nm *netmap.NetworkMap) {
 		return
 	}
 
-	rc := &router.Config{LocalAddrs: nm.Addresses}
+	rc := &router.Config{LocalAddrs: nm.GetAddresses().AsSlice()}
 	err = c.engine.Reconfig(cfg, rc, &dns.Config{}, &tailcfg.Debug{})
 	if err != nil {
 		if errors.Is(err, wgengine.ErrNoChanges) {

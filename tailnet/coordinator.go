@@ -89,7 +89,7 @@ type Node struct {
 	AllowedIPs []netip.Prefix `json:"allowed_ips"`
 	// Endpoints are ip:port combinations that can be used to establish
 	// peer-to-peer connections.
-	Endpoints []string `json:"endpoints"`
+	Endpoints []netip.AddrPort `json:"endpoints"`
 }
 
 // ServeCoordinator matches the RW structure of a coordinator to exchange node messages.
