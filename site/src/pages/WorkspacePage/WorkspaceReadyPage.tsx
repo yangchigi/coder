@@ -169,17 +169,16 @@ export const WorkspaceReadyPage: FC<WorkspaceReadyPageProps> = ({
   };
 
   const severityWarning = useSeverityWarning();
-  const jfrogXRayResults = useMutation(
-    getJFrogXrayResults(workspace, queryClient),
-  );
+  const jfrogXRayResults = useQuery(getJFrogXrayResults(workspace));
 
   useEffect(() => {
+    console.log("results: ", jfrogXRayResults.data);
     if (jfrogXRayResults.data) {
       severityWarning.setResults(jfrogXRayResults.data);
     } else {
       severityWarning.setResults(undefined);
     }
-  }, [severityWarning, jfrogXRayResults.data]);
+  }, [severityWarning, jfrogXRayResults.data, workspace]);
 
   return (
     <>

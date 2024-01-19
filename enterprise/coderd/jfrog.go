@@ -58,13 +58,12 @@ func (api *API) jFrogXrayScan(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	scan, err := api.Database.GetJFrogXrayScanByWorkspaceID(ctx, id)
-	if xerrors.Is(err, sql.ErrNoRows) {
-		httpapi.RouteNotFound(rw)
-		return
-	}
-	if err != nil {
+	if err != nil && !xerrors.Is(err, sql.ErrNoRows) {
 		httpapi.InternalServerError(rw, err)
 		return
+	}
+	if scan.Payload == nil {
+		scan.Payload = []byte("{}")
 	}
 
 	httpapi.Write(ctx, rw, http.StatusOK, scan.Payload)
