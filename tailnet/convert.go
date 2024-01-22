@@ -49,7 +49,7 @@ func NodeToProto(n *Node) (*proto.Node, error) {
 		allowedIPs[i] = string(s)
 	}
 	endpoints := make([]string, len(n.Endpoints))
-	for i, endpoint := range n.AllowedIPs {
+	for i, endpoint := range n.Endpoints {
 		s, err := endpoint.MarshalText()
 		if err != nil {
 			return nil, err
