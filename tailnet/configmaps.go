@@ -35,9 +35,12 @@ const lostTimeout = 15 * time.Minute
 type engineConfigurable interface {
 	UpdateStatus(*ipnstate.StatusBuilder)
 	SetNetworkMap(*netmap.NetworkMap)
-	Reconfig(*wgcfg.Config, *router.Config, *dns.Config, *tailcfg.Debug) error
-	SetDERPMap(*tailcfg.DERPMap)
+	Reconfig(*wgcfg.Config, *router.Config, *dns.Config) error
 	SetFilter(*filter.Filter)
+}
+
+type connConfigurable interface {
+	SetDERPMap(*tailcfg.DERPMap)
 }
 
 type phase int
@@ -61,6 +64,7 @@ type configMaps struct {
 	closing      bool
 
 	engine         engineConfigurable
+	conn           connConfigurable
 	static         netmap.NetworkMap
 	peers          map[uuid.UUID]*peerLifecycle
 	addresses      []netip.Prefix
@@ -72,7 +76,7 @@ type configMaps struct {
 	clock clock.Clock
 }
 
-func newConfigMaps(logger slog.Logger, engine engineConfigurable, nodeID tailcfg.NodeID, nodeKey key.NodePrivate, discoKey key.DiscoPublic) *configMaps {
+func newConfigMaps(logger slog.Logger, engine engineConfigurable, conn connConfigurable, nodeID tailcfg.NodeID, nodeKey key.NodePrivate, discoKey key.DiscoPublic) *configMaps {
 	pubKey := nodeKey.Public()
 	c := &configMaps{
 		phased: phased{Cond: *(sync.NewCond(&sync.Mutex{}))},
@@ -147,7 +151,7 @@ func (c *configMaps) configLoop() {
 			derpMap := c.derpMapLocked()
 			actions = append(actions, func() {
 				c.logger.Debug(context.Background(), "updating engine DERP map", slog.F("derp_map", derpMap))
-				c.engine.SetDERPMap(derpMap)
+				c.conn.SetDERPMap(derpMap)
 			})
 		}
 		if c.netmapDirty {
@@ -291,7 +295,7 @@ func (c *configMaps) reconfig(nm *netmap.NetworkMap) {
 	}
 
 	rc := &router.Config{LocalAddrs: nm.GetAddresses().AsSlice()}
-	err = c.engine.Reconfig(cfg, rc, &dns.Config{}, &tailcfg.Debug{})
+	err = c.engine.Reconfig(cfg, rc, &dns.Config{})
 	if err != nil {
 		if errors.Is(err, wgengine.ErrNoChanges) {
 			return
@@ -432,6 +436,29 @@ func (c *configMaps) updatePeerLocked(update *proto.CoordinateResponse_PeerUpdat
 	}
 }
 
+// setAllPeersLost marks all peers as lost.  Typically, this is called when we lose connection to
+// the Coordinator.  (When we reconnect, we will get NODE updates for all peers that are still connected
+// and mark them as not lost.)
+func (c *configMaps) setAllPeersLost() {
+	c.L.Lock()
+	defer c.L.Unlock()
+	for _, lc := range c.peers {
+		if lc.lost {
+			// skip processing already lost nodes, as this just results in timer churn
+			continue
+		}
+		lc.lost = true
+		lc.setLostTimer(c)
+		// it's important to drop a log here so that we see it get marked lost if grepping thru
+		// the logs for a specific peer
+		c.logger.Debug(context.Background(),
+			"setAllPeersLost marked peer lost",
+			slog.F("peer_id", lc.peerID),
+			slog.F("key_id", lc.node.Key.ShortString()),
+		)
+	}
+}
+
 // peerLostTimeout is the callback that peerLifecycle uses when a peer is lost the timeout to
 // receive a handshake fires.
 func (c *configMaps) peerLostTimeout(id uuid.UUID) {
@@ -490,6 +517,18 @@ func (c *configMaps) protoNodeToTailcfg(p *proto.Node) (*tailcfg.Node, error) {
 		DERP:       fmt.Sprintf("%s:%d", tailcfg.DerpMagicIP, node.PreferredDERP),
 		Hostinfo:   (&tailcfg.Hostinfo{}).View(),
 	}, nil
+}
+
+// nodeAddresses returns the addresses for the peer with the given publicKey, if known.
+func (c *configMaps) nodeAddresses(publicKey key.NodePublic) ([]netip.Prefix, bool) {
+	c.L.Lock()
+	defer c.L.Unlock()
+	for _, lc := range c.peers {
+		if lc.node.Key == publicKey {
+			return lc.node.Addresses, true
+		}
+	}
+	return nil, false
 }
 
 type peerLifecycle struct {

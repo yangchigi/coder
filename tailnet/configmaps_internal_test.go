@@ -30,11 +30,11 @@ func TestConfigMaps_setAddresses_different(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	addrs := []netip.Prefix{netip.MustParsePrefix("192.168.0.200/32")}
@@ -88,12 +88,12 @@ func TestConfigMaps_setAddresses_same(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
 	addrs := []netip.Prefix{netip.MustParsePrefix("192.168.0.200/32")}
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	// Given: addresses already set
@@ -119,11 +119,11 @@ func TestConfigMaps_updatePeers_new(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	p1ID := uuid.UUID{1}
@@ -189,11 +189,11 @@ func TestConfigMaps_updatePeers_same(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	// Then: we don't configure
@@ -248,11 +248,11 @@ func TestConfigMaps_updatePeers_disconnect(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	p1ID := uuid.UUID{1}
@@ -316,11 +316,11 @@ func TestConfigMaps_updatePeers_lost(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 	start := time.Date(2024, time.January, 1, 8, 0, 0, 0, time.UTC)
 	mClock := clock.NewMock()
@@ -409,11 +409,11 @@ func TestConfigMaps_updatePeers_lost_and_found(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 	start := time.Date(2024, time.January, 1, 8, 0, 0, 0, time.UTC)
 	mClock := clock.NewMock()
@@ -491,15 +491,100 @@ func TestConfigMaps_updatePeers_lost_and_found(t *testing.T) {
 	_ = testutil.RequireRecvCtx(ctx, t, done)
 }
 
+func TestConfigMaps_setAllPeersLost(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
+	fEng, fConn := newFakeConfigurables()
+	nodePrivateKey := key.NewNode()
+	nodeID := tailcfg.NodeID(5)
+	discoKey := key.NewDisco()
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
+	defer uut.close()
+	start := time.Date(2024, time.January, 1, 8, 0, 0, 0, time.UTC)
+	mClock := clock.NewMock()
+	mClock.Set(start)
+	uut.clock = mClock
+
+	p1ID := uuid.UUID{1}
+	p1Node := newTestNode(1)
+	p1n, err := NodeToProto(p1Node)
+	require.NoError(t, err)
+	p2ID := uuid.UUID{2}
+	p2Node := newTestNode(2)
+	p2n, err := NodeToProto(p2Node)
+	require.NoError(t, err)
+
+	s1 := expectStatusWithHandshake(ctx, t, fEng, p1Node.Key, start)
+
+	updates := []*proto.CoordinateResponse_PeerUpdate{
+		{
+			Id:   p1ID[:],
+			Kind: proto.CoordinateResponse_PeerUpdate_NODE,
+			Node: p1n,
+		},
+		{
+			Id:   p2ID[:],
+			Kind: proto.CoordinateResponse_PeerUpdate_NODE,
+			Node: p2n,
+		},
+	}
+	uut.updatePeers(updates)
+	nm := testutil.RequireRecvCtx(ctx, t, fEng.setNetworkMap)
+	r := testutil.RequireRecvCtx(ctx, t, fEng.reconfig)
+	require.Len(t, nm.Peers, 2)
+	require.Len(t, r.wg.Peers, 2)
+	_ = testutil.RequireRecvCtx(ctx, t, s1)
+
+	mClock.Add(5 * time.Second)
+	uut.setAllPeersLost()
+
+	// No reprogramming yet, since we keep the peer around.
+	select {
+	case <-fEng.setNetworkMap:
+		t.Fatal("should not reprogram")
+	default:
+		// OK!
+	}
+
+	// When we advance the clock, even by a few ms, the timeout for peer 2 pops
+	// because our status only includes a handshake for peer 1
+	s2 := expectStatusWithHandshake(ctx, t, fEng, p1Node.Key, start)
+	mClock.Add(time.Millisecond * 10)
+	_ = testutil.RequireRecvCtx(ctx, t, s2)
+
+	nm = testutil.RequireRecvCtx(ctx, t, fEng.setNetworkMap)
+	r = testutil.RequireRecvCtx(ctx, t, fEng.reconfig)
+	require.Len(t, nm.Peers, 1)
+	require.Len(t, r.wg.Peers, 1)
+
+	// Finally, advance the clock until after the timeout
+	s3 := expectStatusWithHandshake(ctx, t, fEng, p1Node.Key, start)
+	mClock.Add(lostTimeout)
+	_ = testutil.RequireRecvCtx(ctx, t, s3)
+
+	nm = testutil.RequireRecvCtx(ctx, t, fEng.setNetworkMap)
+	r = testutil.RequireRecvCtx(ctx, t, fEng.reconfig)
+	require.Len(t, nm.Peers, 0)
+	require.Len(t, r.wg.Peers, 0)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		uut.close()
+	}()
+	_ = testutil.RequireRecvCtx(ctx, t, done)
+}
+
 func TestConfigMaps_setBlockEndpoints_different(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	p1ID := uuid.MustParse("10000000-0000-0000-0000-000000000000")
@@ -539,11 +624,11 @@ func TestConfigMaps_setBlockEndpoints_same(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	p1ID := uuid.MustParse("10000000-0000-0000-0000-000000000000")
@@ -582,11 +667,11 @@ func TestConfigMaps_setDERPMap_different(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	derpMap := &proto.DERPMap{
@@ -602,7 +687,7 @@ func TestConfigMaps_setDERPMap_different(t *testing.T) {
 	}
 	uut.setDERPMap(derpMap)
 
-	dm := testutil.RequireRecvCtx(ctx, t, fEng.setDERPMap)
+	dm := testutil.RequireRecvCtx(ctx, t, fConn.setDERPMap)
 	require.Len(t, dm.HomeParams.RegionScore, 1)
 	require.Equal(t, dm.HomeParams.RegionScore[1], 0.025)
 	require.Len(t, dm.Regions, 1)
@@ -623,11 +708,11 @@ func TestConfigMaps_setDERPMap_same(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-	fEng := newFakeEngineConfigurable()
+	fEng, fConn := newFakeConfigurables()
 	nodePrivateKey := key.NewNode()
 	nodeID := tailcfg.NodeID(5)
 	discoKey := key.NewDisco()
-	uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+	uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 	defer uut.close()
 
 	// Given: DERP Map already set
@@ -700,11 +785,11 @@ func TestConfigMaps_updatePeers_nonexist(t *testing.T) {
 			t.Parallel()
 			ctx := testutil.Context(t, testutil.WaitShort)
 			logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
-			fEng := newFakeEngineConfigurable()
+			fEng, fConn := newFakeConfigurables()
 			nodePrivateKey := key.NewNode()
 			nodeID := tailcfg.NodeID(5)
 			discoKey := key.NewDisco()
-			uut := newConfigMaps(logger, fEng, nodeID, nodePrivateKey, discoKey.Public())
+			uut := newConfigMaps(logger, fEng, fConn, nodeID, nodePrivateKey, discoKey.Public())
 			defer uut.close()
 
 			// Then: we don't configure
@@ -785,7 +870,6 @@ type fakeEngineConfigurable struct {
 	setNetworkMap chan *netmap.NetworkMap
 	reconfig      chan reconfigCall
 	filter        chan *filter.Filter
-	setDERPMap    chan *tailcfg.DERPMap
 
 	// To fake these fields the test should read from status, do stuff to the
 	// StatusBuilder, then write to statusDone
@@ -798,12 +882,15 @@ func (f fakeEngineConfigurable) UpdateStatus(status *ipnstate.StatusBuilder) {
 	<-f.statusDone
 }
 
+func newFakeConfigurables() (*fakeEngineConfigurable, *fakeConnConfigurable) {
+	return newFakeEngineConfigurable(), newFakeConnConfigurable()
+}
+
 func newFakeEngineConfigurable() *fakeEngineConfigurable {
 	return &fakeEngineConfigurable{
 		setNetworkMap: make(chan *netmap.NetworkMap),
 		reconfig:      make(chan reconfigCall),
 		filter:        make(chan *filter.Filter),
-		setDERPMap:    make(chan *tailcfg.DERPMap),
 		status:        make(chan *ipnstate.StatusBuilder),
 		statusDone:    make(chan struct{}),
 	}
@@ -813,15 +900,25 @@ func (f fakeEngineConfigurable) SetNetworkMap(networkMap *netmap.NetworkMap) {
 	f.setNetworkMap <- networkMap
 }
 
-func (f fakeEngineConfigurable) Reconfig(wg *wgcfg.Config, r *router.Config, _ *dns.Config, _ *tailcfg.Debug) error {
+func (f fakeEngineConfigurable) Reconfig(wg *wgcfg.Config, r *router.Config, _ *dns.Config) error {
 	f.reconfig <- reconfigCall{wg: wg, router: r}
 	return nil
 }
 
-func (f fakeEngineConfigurable) SetDERPMap(d *tailcfg.DERPMap) {
-	f.setDERPMap <- d
-}
-
 func (f fakeEngineConfigurable) SetFilter(flt *filter.Filter) {
 	f.filter <- flt
+}
+
+type fakeConnConfigurable struct {
+	setDERPMap chan *tailcfg.DERPMap
+}
+
+func newFakeConnConfigurable() *fakeConnConfigurable {
+	return &fakeConnConfigurable{
+		setDERPMap: make(chan *tailcfg.DERPMap),
+	}
+}
+
+func (f fakeConnConfigurable) SetDERPMap(d *tailcfg.DERPMap) {
+	f.setDERPMap <- d
 }

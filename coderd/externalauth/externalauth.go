@@ -300,6 +300,7 @@ func (c *DeviceAuth) AuthorizeDevice(ctx context.Context) (*codersdk.ExternalAut
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Accept", "application/json")
 
 	do := http.DefaultClient.Do
 	if c.Config != nil {
@@ -310,7 +311,6 @@ func (c *DeviceAuth) AuthorizeDevice(ctx context.Context) (*codersdk.ExternalAut
 	}
 
 	resp, err := do(req)
-	req.Header.Set("Accept", "application/json")
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (c *DeviceAuth) AuthorizeDevice(ctx context.Context) (*codersdk.ExternalAut
 		case http.StatusTooManyRequests:
 			return nil, xerrors.New("rate limit hit, unable to authorize device. please try again later")
 		default:
-			return nil, err
+			return nil, xerrors.Errorf("status_code=%d: %w", resp.StatusCode, err)
 		}
 	}
 	if r.ErrorDescription != "" {

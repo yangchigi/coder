@@ -6,7 +6,7 @@ import {
 import { FieldError } from "api/errors";
 import type * as TypesGen from "api/typesGenerated";
 import range from "lodash/range";
-import { Permissions } from "contexts/AuthProvider/permissions";
+import type { Permissions } from "contexts/auth/permissions";
 import { TemplateVersionFiles } from "utils/templateVersion";
 import { FileTree } from "utils/filetree";
 import { ProxyLatencyReport } from "contexts/useProxyLatency";
@@ -359,7 +359,14 @@ export const MockProvisionerJob: TypesGen.ProvisionerJob = {
   status: "succeeded",
   file_id: MockOrganization.id,
   completed_at: "2022-05-17T17:39:01.382927298Z",
-  tags: {},
+  tags: {
+    scope: "organization",
+    owner: "",
+    wowzers: "whatatag",
+    isCapable: "false",
+    department: "engineering",
+    dreaming: "true",
+  },
   queue_position: 0,
   queue_size: 0,
 };
@@ -1091,6 +1098,26 @@ export const MockOutdatedWorkspace: TypesGen.Workspace = {
   ...MockFailedWorkspace,
   id: "test-outdated-workspace",
   outdated: true,
+};
+
+export const MockRunningOutdatedWorkspace: TypesGen.Workspace = {
+  ...MockWorkspace,
+  id: "test-running-outdated-workspace",
+  outdated: true,
+};
+
+export const MockDormantWorkspace: TypesGen.Workspace = {
+  ...MockStoppedWorkspace,
+  id: "test-dormant-workspace",
+  dormant_at: new Date().toISOString(),
+};
+
+export const MockDormantOutdatedWorkspace: TypesGen.Workspace = {
+  ...MockStoppedWorkspace,
+  id: "test-dormant-outdated-workspace",
+  name: "Dormant-Workspace",
+  outdated: true,
+  dormant_at: new Date().toISOString(),
 };
 
 export const MockOutdatedRunningWorkspaceRequireActiveVersion: TypesGen.Workspace =

@@ -19,9 +19,9 @@ import { useTheme } from "@mui/material/styles";
 import { SidebarIconButton } from "components/FullPageLayout/Sidebar";
 import HubOutlined from "@mui/icons-material/HubOutlined";
 import { ResourcesSidebar } from "./ResourcesSidebar";
-import { ResourceCard } from "components/Resources/ResourceCard";
 import { WorkspacePermissions } from "./permissions";
 import { resourceOptionValue, useResourcesNav } from "./useResourcesNav";
+import { ResourceMetadata } from "./ResourceMetadata";
 
 export interface WorkspaceProps {
   handleStart: (buildParameters?: TypesGen.WorkspaceBuildParameter[]) => void;
@@ -184,6 +184,12 @@ export const Workspace: FC<WorkspaceProps> = ({
 
       <div css={styles.content}>
         <div css={styles.dotBackground}>
+          {selectedResource && (
+            <ResourceMetadata
+              resource={selectedResource}
+              css={{ margin: "-48px 0 24px -48px" }}
+            />
+          )}
           <div
             css={{
               display: "flex",
@@ -231,9 +237,10 @@ export const Workspace: FC<WorkspaceProps> = ({
             {buildLogs}
 
             {selectedResource && (
-              <ResourceCard
-                resource={selectedResource}
-                agentRow={(agent) => (
+              <section
+                css={{ display: "flex", flexDirection: "column", gap: 24 }}
+              >
+                {selectedResource.agents?.map((agent) => (
                   <AgentRow
                     key={agent.id}
                     agent={agent}
@@ -247,8 +254,27 @@ export const Workspace: FC<WorkspaceProps> = ({
                     serverAPIVersion={buildInfo?.agent_api_version || ""}
                     onUpdateAgent={handleUpdate} // On updating the workspace the agent version is also updated
                   />
+                ))}
+
+                {(!selectedResource.agents ||
+                  selectedResource.agents?.length === 0) && (
+                  <div
+                    css={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      width: "100%",
+                      height: "100%",
+                    }}
+                  >
+                    <div>
+                      <h4 css={{ fontSize: 16, fontWeight: 500 }}>
+                        No agents are currently assigned to this resource.
+                      </h4>
+                    </div>
+                  </div>
                 )}
-              />
+              </section>
             )}
           </div>
         </div>
@@ -266,6 +292,7 @@ const styles = {
     padding: 24,
     gridArea: "content",
     overflowY: "auto",
+    position: "relative",
   },
 
   dotBackground: (theme) => ({
