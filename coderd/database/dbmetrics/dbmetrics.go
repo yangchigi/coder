@@ -79,6 +79,20 @@ func (m metricsStore) InTx(f func(database.Store) error, options *sql.TxOptions)
 	return err
 }
 
+func (m metricsStore) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (database.JfrogXray, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetJFrogXrayScanByWorkspaceID(ctx, workspaceID)
+	m.queryLatencies.WithLabelValues("GetJFrogXrayScanByWorkspaceID").Observe(time.Since(start).Seconds())
+	return r0, r1
+}
+
+func (m metricsStore) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+	start := time.Now()
+	r0 := m.s.InsertJFrogXrayScanByWorkspaceID(ctx, arg)
+	m.queryLatencies.WithLabelValues("InsertJFrogXrayScanByWorkspaceID").Observe(time.Since(start).Seconds())
+	return r0
+}
+
 func (m metricsStore) AcquireLock(ctx context.Context, pgAdvisoryXactLock int64) error {
 	start := time.Now()
 	err := m.s.AcquireLock(ctx, pgAdvisoryXactLock)
@@ -538,10 +552,10 @@ func (m metricsStore) GetHungProvisionerJobs(ctx context.Context, hungSince time
 	return jobs, err
 }
 
-func (m metricsStore) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (database.JfrogXray, error) {
+func (m metricsStore) GetJFrogXrayScanByWorkspaceAndAgentID(ctx context.Context, arg database.GetJFrogXrayScanByWorkspaceAndAgentIDParams) (database.JfrogXray, error) {
 	start := time.Now()
-	r0, r1 := m.s.GetJFrogXrayScanByWorkspaceID(ctx, workspaceID)
-	m.queryLatencies.WithLabelValues("GetJFrogXrayScanByWorkspaceID").Observe(time.Since(start).Seconds())
+	r0, r1 := m.s.GetJFrogXrayScanByWorkspaceAndAgentID(ctx, arg)
+	m.queryLatencies.WithLabelValues("GetJFrogXrayScanByWorkspaceAndAgentID").Observe(time.Since(start).Seconds())
 	return r0, r1
 }
 
@@ -1376,10 +1390,10 @@ func (m metricsStore) InsertGroupMember(ctx context.Context, arg database.Insert
 	return err
 }
 
-func (m metricsStore) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+func (m metricsStore) InsertJFrogXrayScanByWorkspaceAndAgentID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceAndAgentIDParams) error {
 	start := time.Now()
-	r0 := m.s.InsertJFrogXrayScanByWorkspaceID(ctx, arg)
-	m.queryLatencies.WithLabelValues("InsertJFrogXrayScanByWorkspaceID").Observe(time.Since(start).Seconds())
+	r0 := m.s.InsertJFrogXrayScanByWorkspaceAndAgentID(ctx, arg)
+	m.queryLatencies.WithLabelValues("InsertJFrogXrayScanByWorkspaceAndAgentID").Observe(time.Since(start).Seconds())
 	return r0
 }
 

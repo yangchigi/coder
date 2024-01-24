@@ -730,6 +730,19 @@ func isNotNull(v interface{}) bool {
 	return reflect.ValueOf(v).FieldByName("Valid").Bool()
 }
 
+func (q *FakeQuerier) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (database.JfrogXray, error) {
+	panic("not implemented")
+}
+
+func (q *FakeQuerier) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return err
+	}
+
+	panic("not implemented")
+}
+
 func (*FakeQuerier) AcquireLock(_ context.Context, _ int64) error {
 	return xerrors.New("AcquireLock must only be called within a transaction")
 }
@@ -1966,7 +1979,12 @@ func (q *FakeQuerier) GetHungProvisionerJobs(_ context.Context, hungSince time.T
 	return hungJobs, nil
 }
 
-func (q *FakeQuerier) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (database.JfrogXray, error) {
+func (q *FakeQuerier) GetJFrogXrayScanByWorkspaceAndAgentID(ctx context.Context, arg database.GetJFrogXrayScanByWorkspaceAndAgentIDParams) (database.JfrogXray, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return database.JfrogXray{}, err
+	}
+
 	panic("not implemented")
 }
 
@@ -5016,7 +5034,7 @@ func (q *FakeQuerier) InsertGroupMember(_ context.Context, arg database.InsertGr
 	return nil
 }
 
-func (q *FakeQuerier) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceIDParams) error {
+func (q *FakeQuerier) InsertJFrogXrayScanByWorkspaceAndAgentID(ctx context.Context, arg database.InsertJFrogXrayScanByWorkspaceAndAgentIDParams) error {
 	err := validateDatabaseType(arg)
 	if err != nil {
 		return err

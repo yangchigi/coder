@@ -2438,41 +2438,50 @@ func (q *sqlQuerier) GetUserLatencyInsights(ctx context.Context, arg GetUserLate
 	return items, nil
 }
 
-const getJFrogXrayScanByWorkspaceID = `-- name: GetJFrogXrayScanByWorkspaceID :one
+const getJFrogXrayScanByWorkspaceAndAgentID = `-- name: GetJFrogXrayScanByWorkspaceAndAgentID :one
 SELECT
-	workspace_id, payload
+	agent_id, workspace_id, payload
 FROM
 	jfrog_xray
 WHERE
-	workspace_id = $1
+	agent_id = $1
+AND
+	workspace_id = $2
 LIMIT
 	1
 `
 
-func (q *sqlQuerier) GetJFrogXrayScanByWorkspaceID(ctx context.Context, workspaceID uuid.UUID) (JfrogXray, error) {
-	row := q.db.QueryRowContext(ctx, getJFrogXrayScanByWorkspaceID, workspaceID)
+type GetJFrogXrayScanByWorkspaceAndAgentIDParams struct {
+	AgentID     uuid.UUID `db:"agent_id" json:"agent_id"`
+	WorkspaceID uuid.UUID `db:"workspace_id" json:"workspace_id"`
+}
+
+func (q *sqlQuerier) GetJFrogXrayScanByWorkspaceAndAgentID(ctx context.Context, arg GetJFrogXrayScanByWorkspaceAndAgentIDParams) (JfrogXray, error) {
+	row := q.db.QueryRowContext(ctx, getJFrogXrayScanByWorkspaceAndAgentID, arg.AgentID, arg.WorkspaceID)
 	var i JfrogXray
-	err := row.Scan(&i.WorkspaceID, &i.Payload)
+	err := row.Scan(&i.AgentID, &i.WorkspaceID, &i.Payload)
 	return i, err
 }
 
-const insertJFrogXrayScanByWorkspaceID = `-- name: InsertJFrogXrayScanByWorkspaceID :exec
+const insertJFrogXrayScanByWorkspaceAndAgentID = `-- name: InsertJFrogXrayScanByWorkspaceAndAgentID :exec
 INSERT INTO 
 	jfrog_xray (
+		agent_id,
 		workspace_id,
 		payload
 	)
 VALUES 
-	($1, $2)
+	($1, $2, $3)
 `
 
-type InsertJFrogXrayScanByWorkspaceIDParams struct {
+type InsertJFrogXrayScanByWorkspaceAndAgentIDParams struct {
+	AgentID     uuid.UUID       `db:"agent_id" json:"agent_id"`
 	WorkspaceID uuid.UUID       `db:"workspace_id" json:"workspace_id"`
 	Payload     json.RawMessage `db:"payload" json:"payload"`
 }
 
-func (q *sqlQuerier) InsertJFrogXrayScanByWorkspaceID(ctx context.Context, arg InsertJFrogXrayScanByWorkspaceIDParams) error {
-	_, err := q.db.ExecContext(ctx, insertJFrogXrayScanByWorkspaceID, arg.WorkspaceID, arg.Payload)
+func (q *sqlQuerier) InsertJFrogXrayScanByWorkspaceAndAgentID(ctx context.Context, arg InsertJFrogXrayScanByWorkspaceAndAgentIDParams) error {
+	_, err := q.db.ExecContext(ctx, insertJFrogXrayScanByWorkspaceAndAgentID, arg.AgentID, arg.WorkspaceID, arg.Payload)
 	return err
 }
 

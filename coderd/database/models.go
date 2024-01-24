@@ -1780,6 +1780,7 @@ type GroupMember struct {
 }
 
 type JfrogXray struct {
+	AgentID     uuid.UUID       `db:"agent_id" json:"agent_id"`
 	WorkspaceID uuid.UUID       `db:"workspace_id" json:"workspace_id"`
 	Payload     json.RawMessage `db:"payload" json:"payload"`
 }

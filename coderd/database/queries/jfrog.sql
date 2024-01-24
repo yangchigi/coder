@@ -1,18 +1,21 @@
--- name: GetJFrogXrayScanByWorkspaceID :one
+-- name: GetJFrogXrayScanByWorkspaceAndAgentID :one
 SELECT
 	*
 FROM
 	jfrog_xray
 WHERE
-	workspace_id = $1
+	agent_id = $1
+AND
+	workspace_id = $2
 LIMIT
 	1;
 
--- name: InsertJFrogXrayScanByWorkspaceID :exec
+-- name: InsertJFrogXrayScanByWorkspaceAndAgentID :exec
 INSERT INTO 
 	jfrog_xray (
+		agent_id,
 		workspace_id,
 		payload
 	)
 VALUES 
-	($1, $2);
+	($1, $2, $3);
