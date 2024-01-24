@@ -2,6 +2,7 @@ package tailnet
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -68,7 +69,7 @@ type configMaps struct {
 	static         netmap.NetworkMap
 	peers          map[uuid.UUID]*peerLifecycle
 	addresses      []netip.Prefix
-	derpMap        *proto.DERPMap
+	derpMap        *tailcfg.DERPMap
 	logger         slog.Logger
 	blockEndpoints bool
 
@@ -150,14 +151,14 @@ func (c *configMaps) configLoop() {
 		if c.derpMapDirty {
 			derpMap := c.derpMapLocked()
 			actions = append(actions, func() {
-				c.logger.Debug(context.Background(), "updating engine DERP map", slog.F("derp_map", derpMap))
+				c.logger.Info(context.Background(), "updating engine DERP map", slog.F("derp_map", (*derpMapStringer)(derpMap)))
 				c.conn.SetDERPMap(derpMap)
 			})
 		}
 		if c.netmapDirty {
 			nm := c.netMapLocked()
 			actions = append(actions, func() {
-				c.logger.Debug(context.Background(), "updating engine network map", slog.F("network_map", nm))
+				c.logger.Info(context.Background(), "updating engine network map", slog.F("network_map", nm))
 				c.engine.SetNetworkMap(nm)
 				c.reconfig(nm)
 			})
@@ -165,7 +166,7 @@ func (c *configMaps) configLoop() {
 		if c.filterDirty {
 			f := c.filterLocked()
 			actions = append(actions, func() {
-				c.logger.Debug(context.Background(), "updating engine filter", slog.F("filter", f))
+				c.logger.Info(context.Background(), "updating engine filter", slog.F("filter", f))
 				c.engine.SetFilter(f)
 			})
 		}
@@ -207,7 +208,7 @@ func (c *configMaps) netMapLocked() *netmap.NetworkMap {
 	addrs := make([]netip.Prefix, len(c.addresses))
 	copy(addrs, c.addresses)
 
-	nm.DERPMap = DERPMapFromProto(c.derpMap)
+	nm.DERPMap = c.derpMap.Clone()
 	nm.Peers = c.peerConfigLocked()
 	selfNode := nm.SelfNode.AsStruct()
 	selfNode.Addresses = addrs
@@ -260,15 +261,10 @@ func (c *configMaps) setBlockEndpoints(blockEndpoints bool) {
 
 // setDERPMap sets the DERP map, triggering a configuration of the engine if it has changed.
 // c.L MUST NOT be held.
-func (c *configMaps) setDERPMap(derpMap *proto.DERPMap) {
+func (c *configMaps) setDERPMap(derpMap *tailcfg.DERPMap) {
 	c.L.Lock()
 	defer c.L.Unlock()
-	eq, err := c.derpMap.Equal(derpMap)
-	if err != nil {
-		c.logger.Critical(context.Background(), "failed to compare DERP maps", slog.Error(err))
-		return
-	}
-	if eq {
+	if CompareDERPMaps(c.derpMap, derpMap) {
 		return
 	}
 	c.derpMap = derpMap
@@ -278,8 +274,7 @@ func (c *configMaps) setDERPMap(derpMap *proto.DERPMap) {
 
 // derMapLocked returns the current DERPMap.  c.L must be held
 func (c *configMaps) derpMapLocked() *tailcfg.DERPMap {
-	m := DERPMapFromProto(c.derpMap)
-	return m
+	return c.derpMap.Clone()
 }
 
 // reconfig computes the correct wireguard config and calls the engine.Reconfig
@@ -575,4 +570,17 @@ func prefixesDifferent(a, b []netip.Prefix) bool {
 		}
 	}
 	return false
+}
+
+// derpMapStringer converts a DERPMap into a readable string for logging, since
+// it includes pointers that we want to know the contents of, not actual pointer
+// address.
+type derpMapStringer tailcfg.DERPMap
+
+func (d *derpMapStringer) String() string {
+	out, err := json.Marshal((*tailcfg.DERPMap)(d))
+	if err != nil {
+		return fmt.Sprintf("!!!error marshaling DERPMap: %s", err.Error())
+	}
+	return string(out)
 }

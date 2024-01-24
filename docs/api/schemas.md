@@ -3519,6 +3519,24 @@ AuthorizationObject can represent a "set" of objects, such as: all workspaces in
 | `id`         | string | true     |              |             |
 | `username`   | string | true     |              |             |
 
+## codersdk.OAuth2AppEndpoints
+
+```json
+{
+  "authorization": "string",
+  "device_authorization": "string",
+  "token": "string"
+}
+```
+
+### Properties
+
+| Name                   | Type   | Required | Restrictions | Description                       |
+| ---------------------- | ------ | -------- | ------------ | --------------------------------- |
+| `authorization`        | string | false    |              |                                   |
+| `device_authorization` | string | false    |              | Device authorization is optional. |
+| `token`                | string | false    |              |                                   |
+
 ## codersdk.OAuth2Config
 
 ```json
@@ -3572,6 +3590,11 @@ AuthorizationObject can represent a "set" of objects, such as: all workspaces in
 ```json
 {
   "callback_url": "string",
+  "endpoints": {
+    "authorization": "string",
+    "device_authorization": "string",
+    "token": "string"
+  },
   "icon": "string",
   "id": "497f6eca-6276-4993-bfeb-53cbbbba6f08",
   "name": "string"
@@ -3580,12 +3603,13 @@ AuthorizationObject can represent a "set" of objects, such as: all workspaces in
 
 ### Properties
 
-| Name           | Type   | Required | Restrictions | Description |
-| -------------- | ------ | -------- | ------------ | ----------- |
-| `callback_url` | string | false    |              |             |
-| `icon`         | string | false    |              |             |
-| `id`           | string | false    |              |             |
-| `name`         | string | false    |              |             |
+| Name           | Type                                                       | Required | Restrictions | Description                                                                                                                                                                                             |
+| -------------- | ---------------------------------------------------------- | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `callback_url` | string                                                     | false    |              |                                                                                                                                                                                                         |
+| `endpoints`    | [codersdk.OAuth2AppEndpoints](#codersdkoauth2appendpoints) | false    |              | Endpoints are included in the app response for easier discovery. The OAuth2 spec does not have a defined place to find these (for comparison, OIDC has a '/.well-known/openid-configuration' endpoint). |
+| `icon`         | string                                                     | false    |              |                                                                                                                                                                                                         |
+| `id`           | string                                                     | false    |              |                                                                                                                                                                                                         |
+| `name`         | string                                                     | false    |              |                                                                                                                                                                                                         |
 
 ## codersdk.OAuth2ProviderAppSecret
 
@@ -5897,6 +5921,7 @@ If the schedule is empty, the user will be updated to use the default schedule.|
   "created_at": "2019-08-24T14:15:22Z",
   "deleting_at": "2019-08-24T14:15:22Z",
   "dormant_at": "2019-08-24T14:15:22Z",
+  "favorite": true,
   "health": {
     "failing_agents": ["497f6eca-6276-4993-bfeb-53cbbbba6f08"],
     "healthy": false
@@ -6077,6 +6102,7 @@ If the schedule is empty, the user will be updated to use the default schedule.|
 | `created_at`                                | string                                                 | false    |              |                                                                                                                                                                                                                                                       |
 | `deleting_at`                               | string                                                 | false    |              | Deleting at indicates the time at which the workspace will be permanently deleted. A workspace is eligible for deletion if it is dormant (a non-nil dormant_at value) and a value has been specified for time_til_dormant_autodelete on its template. |
 | `dormant_at`                                | string                                                 | false    |              | Dormant at being non-nil indicates a workspace that is dormant. A dormant workspace is no longer accessible must be activated. It is subject to deletion if it breaches the duration of the time*til* field on its template.                          |
+| `favorite`                                  | boolean                                                | false    |              |                                                                                                                                                                                                                                                       |
 | `health`                                    | [codersdk.WorkspaceHealth](#codersdkworkspacehealth)   | false    |              | Health shows the health of the workspace and information about what is causing an unhealthy status.                                                                                                                                                   |
 | `id`                                        | string                                                 | false    |              |                                                                                                                                                                                                                                                       |
 | `last_used_at`                              | string                                                 | false    |              |                                                                                                                                                                                                                                                       |
@@ -7160,6 +7186,7 @@ If the schedule is empty, the user will be updated to use the default schedule.|
       "created_at": "2019-08-24T14:15:22Z",
       "deleting_at": "2019-08-24T14:15:22Z",
       "dormant_at": "2019-08-24T14:15:22Z",
+      "favorite": true,
       "health": {
         "failing_agents": ["497f6eca-6276-4993-bfeb-53cbbbba6f08"],
         "healthy": false

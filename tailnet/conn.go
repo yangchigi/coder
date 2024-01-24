@@ -220,7 +220,7 @@ func NewConn(options *Options) (conn *Conn, err error) {
 		magicConn.DiscoPublicKey(),
 	)
 	cfgMaps.setAddresses(options.Addresses)
-	cfgMaps.setDERPMap(DERPMapToProto(options.DERPMap))
+	cfgMaps.setDERPMap(options.DERPMap)
 	cfgMaps.setBlockEndpoints(options.BlockEndpoints)
 
 	nodeUp := newNodeUpdater(
@@ -328,7 +328,7 @@ func (c *Conn) SetNodeCallback(callback func(node *Node)) {
 
 // SetDERPMap updates the DERPMap of a connection.
 func (c *Conn) SetDERPMap(derpMap *tailcfg.DERPMap) {
-	c.configMaps.setDERPMap(DERPMapToProto(derpMap))
+	c.configMaps.setDERPMap(derpMap)
 }
 
 func (c *Conn) SetDERPForceWebSockets(v bool) {
