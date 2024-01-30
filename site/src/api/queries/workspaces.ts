@@ -240,6 +240,21 @@ export const activate = (workspace: Workspace, queryClient: QueryClient) => {
   };
 };
 
+export const jfrogResultsByWorkspaceOwnerAndName = (
+  owner: string,
+  name: string,
+) => ["workspace", owner, name, "xray-results"];
+
+export const getJFrogXrayResults = (workspace: Workspace) => {
+  return {
+    queryKey: jfrogResultsByWorkspaceOwnerAndName(
+      workspace.owner_name,
+      workspace.name,
+    ),
+    queryFn: () => API.fetchJFrogXrayResults(workspace.id),
+  };
+};
+
 const updateWorkspaceBuild = async (
   build: WorkspaceBuild,
   queryClient: QueryClient,

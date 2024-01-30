@@ -15,6 +15,7 @@ import { Loader } from "components/Loader/Loader";
 import { Margins } from "components/Margins/Margins";
 import { WorkspacePermissions, workspaceChecks } from "./permissions";
 import { WorkspaceReadyPage } from "./WorkspaceReadyPage";
+import { SeverityWarningProvider } from "components/Resources/SeverityWarning";
 
 export const WorkspacePage: FC = () => {
   const queryClient = useQueryClient();
@@ -116,11 +117,13 @@ export const WorkspacePage: FC = () => {
       ) : isLoading ? (
         <Loader />
       ) : (
-        <WorkspaceReadyPage
-          workspace={workspace}
-          template={template}
-          permissions={permissions}
-        />
+        <SeverityWarningProvider>
+          <WorkspaceReadyPage
+            workspace={workspace}
+            template={template}
+            permissions={permissions}
+          />
+        </SeverityWarningProvider>
       )}
     </div>
   );

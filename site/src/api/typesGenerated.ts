@@ -613,7 +613,10 @@ export interface JFrogXrayScan {
   readonly agent_id: string;
   readonly critical: number;
   readonly high: number;
+<<<<<<< Updated upstream
   readonly medium: number;
+=======
+>>>>>>> Stashed changes
   readonly results_url: string;
 }
 

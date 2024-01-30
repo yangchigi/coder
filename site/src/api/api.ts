@@ -1689,10 +1689,20 @@ export const updateHealthSettings = async (
   return response.data;
 };
 
+<<<<<<< Updated upstream
 export const putFavoriteWorkspace = async (workspaceID: string) => {
   await axios.put(`/api/v2/workspaces/${workspaceID}/favorite`);
 };
 
 export const deleteFavoriteWorkspace = async (workspaceID: string) => {
   await axios.delete(`/api/v2/workspaces/${workspaceID}/favorite`);
+=======
+export const fetchJFrogXrayResults = async (
+  workspaceID: string,
+): Promise<TypesGen.JFrogXrayScan> => {
+  const resp = await axios.get<TypesGen.JFrogXrayScan>(
+    `/api/v2/exp/jfrog/xray-scan?workspace_id=${workspaceID}`,
+  );
+  return resp.data;
+>>>>>>> Stashed changes
 };

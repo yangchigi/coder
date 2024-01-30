@@ -22,6 +22,7 @@ import {
   startWorkspace,
   toggleFavorite,
   cancelBuild,
+  getJFrogXrayResults,
 } from "api/queries/workspaces";
 import { Alert } from "components/Alert/Alert";
 import { Stack } from "components/Stack/Stack";
@@ -36,6 +37,10 @@ import { UpdateBuildParametersDialog } from "./UpdateBuildParametersDialog";
 import { Workspace } from "./Workspace";
 import { WorkspaceBuildLogsSection } from "./WorkspaceBuildLogsSection";
 import { WorkspaceDeleteDialog } from "./WorkspaceDeleteDialog";
+import {
+  SeverityWarningBanner,
+  useSeverityWarning,
+} from "components/Resources/SeverityWarning";
 
 interface WorkspaceReadyPageProps {
   template: TypesGen.Template;
@@ -169,6 +174,18 @@ export const WorkspaceReadyPage: FC<WorkspaceReadyPageProps> = ({
     }
   };
 
+  const severityWarning = useSeverityWarning();
+  const jfrogXRayResults = useQuery(getJFrogXrayResults(workspace));
+
+  useEffect(() => {
+    console.log("results: ", jfrogXRayResults.data);
+    if (jfrogXRayResults.data) {
+      severityWarning.setResults(jfrogXRayResults.data);
+    } else {
+      severityWarning.setResults(undefined);
+    }
+  }, [severityWarning, jfrogXRayResults.data, workspace]);
+
   return (
     <>
       <Helmet>
@@ -291,6 +308,9 @@ export const WorkspaceReadyPage: FC<WorkspaceReadyPageProps> = ({
           }
         }}
       />
+
+      {workspace.latest_build.status === "running" &&
+        severityWarning.results && <SeverityWarningBanner />}
 
       <ChangeVersionDialog
         templateVersions={allVersions?.reverse()}
