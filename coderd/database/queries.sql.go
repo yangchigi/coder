@@ -1021,25 +1021,41 @@ func (q *sqlQuerier) GetFileByHashAndCreator(ctx context.Context, arg GetFileByH
 
 const getFileByID = `-- name: GetFileByID :one
 SELECT
-	hash, created_at, created_by, mimetype, data, id
+	files.hash, files.created_at, files.created_by, files.mimetype, files.data, files.id,
+	-- These are included for permission purposes.
+	-- They are nullable!
+	template_versions.id AS template_version_id,
+	template_versions.organization_id
 FROM
 	files
+LEFT JOIN
+	provisioner_jobs ON provisioner_jobs.file_id = files.id
+LEFT JOIN
+	template_versions ON template_versions.job_id = provisioner_jobs.id
 WHERE
-	id = $1
+	files.id = $1
 LIMIT
 	1
 `
 
-func (q *sqlQuerier) GetFileByID(ctx context.Context, id uuid.UUID) (File, error) {
+type GetFileByIDRow struct {
+	File              File          `db:"file" json:"file"`
+	TemplateVersionID uuid.NullUUID `db:"template_version_id" json:"template_version_id"`
+	OrganizationID    uuid.NullUUID `db:"organization_id" json:"organization_id"`
+}
+
+func (q *sqlQuerier) GetFileByID(ctx context.Context, id uuid.UUID) (GetFileByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getFileByID, id)
-	var i File
+	var i GetFileByIDRow
 	err := row.Scan(
-		&i.Hash,
-		&i.CreatedAt,
-		&i.CreatedBy,
-		&i.Mimetype,
-		&i.Data,
-		&i.ID,
+		&i.File.Hash,
+		&i.File.CreatedAt,
+		&i.File.CreatedBy,
+		&i.File.Mimetype,
+		&i.File.Data,
+		&i.File.ID,
+		&i.TemplateVersionID,
+		&i.OrganizationID,
 	)
 	return i, err
 }

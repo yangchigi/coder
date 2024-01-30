@@ -1,10 +1,19 @@
 -- name: GetFileByID :one
 SELECT
-	*
+	sqlc.embed(files),
+	-- These are included for permission purposes.
+	-- They are nullable!
+	template_versions.id AS template_version_id,
+	-- TODO: Should this be on the file table?
+	template_versions.organization_id
 FROM
 	files
+LEFT JOIN
+	provisioner_jobs ON provisioner_jobs.file_id = files.id
+LEFT JOIN
+	template_versions ON template_versions.job_id = provisioner_jobs.id
 WHERE
-	id = $1
+	files.id = $1
 LIMIT
 	1;
 

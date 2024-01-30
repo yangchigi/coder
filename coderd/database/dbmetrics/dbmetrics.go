@@ -482,7 +482,7 @@ func (m metricsStore) GetFileByHashAndCreator(ctx context.Context, arg database.
 	return file, err
 }
 
-func (m metricsStore) GetFileByID(ctx context.Context, id uuid.UUID) (database.File, error) {
+func (m metricsStore) GetFileByID(ctx context.Context, id uuid.UUID) (database.GetFileByIDRow, error) {
 	start := time.Now()
 	file, err := m.s.GetFileByID(ctx, id)
 	m.queryLatencies.WithLabelValues("GetFileByID").Observe(time.Since(start).Seconds())

@@ -1826,7 +1826,7 @@ func (q *FakeQuerier) GetFileByHashAndCreator(_ context.Context, arg database.Ge
 	return database.File{}, sql.ErrNoRows
 }
 
-func (q *FakeQuerier) GetFileByID(_ context.Context, id uuid.UUID) (database.File, error) {
+func (q *FakeQuerier) GetFileByID(_ context.Context, id uuid.UUID) (database.GetFileByIDRow, error) {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 

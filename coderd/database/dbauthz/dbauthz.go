@@ -1052,7 +1052,7 @@ func (q *querier) GetFileByHashAndCreator(ctx context.Context, arg database.GetF
 	return file, nil
 }
 
-func (q *querier) GetFileByID(ctx context.Context, id uuid.UUID) (database.File, error) {
+func (q *querier) GetFileByID(ctx context.Context, id uuid.UUID) (database.GetFileByIDRow, error) {
 	file, err := q.db.GetFileByID(ctx, id)
 	if err != nil {
 		return database.File{}, err
