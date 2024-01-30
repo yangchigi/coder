@@ -14,12 +14,14 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
+	"github.com/tailscale/wireguard-go/tun"
 	"golang.org/x/xerrors"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"tailscale.com/envknob"
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/net/connstats"
+	"tailscale.com/net/dns"
 	"tailscale.com/net/netmon"
 	"tailscale.com/net/netns"
 	"tailscale.com/net/tsdial"
@@ -55,10 +57,12 @@ const (
 // with the debug level enabled.
 const EnvMagicsockDebugLogging = "CODER_MAGICSOCK_DEBUG_LOGGING"
 
+const userspaceNetworking bool = false
+
 func init() {
 	// Globally disable network namespacing. All networking happens in
 	// userspace.
-	netns.SetEnabled(false)
+	netns.SetEnabled(!userspaceNetworking)
 	// Tailscale, by default, "trims" the set of peers down to ones that we are
 	// "actively" communicating with in an effort to save memory. Since
 	// Tailscale removed keep-alives, it seems like open but idle connections
@@ -133,6 +137,7 @@ func NewConn(options *Options) (conn *Conn, err error) {
 		nodeID = tailcfg.NodeID(uid)
 	}
 
+	sys := new(tsd.System)
 	wireguardMonitor, err := netmon.New(Logger(options.Logger.Named("net.wgmonitor")))
 	if err != nil {
 		return nil, xerrors.Errorf("create wireguard link monitor: %w", err)
@@ -142,16 +147,45 @@ func NewConn(options *Options) (conn *Conn, err error) {
 			wireguardMonitor.Close()
 		}
 	}()
+	sys.Set(wireguardMonitor)
 
 	dialer := &tsdial.Dialer{
 		Logf: Logger(options.Logger.Named("net.tsdial")),
 	}
-	sys := new(tsd.System)
+	sys.Set(dialer)
+
+	var (
+		tunDev  tun.Device
+		devName string
+		dnsDev  dns.OSConfigurator
+	)
+	if !userspaceNetworking {
+		tunDev, devName, err = tstun.New(Logger(options.Logger.Named("net.tun")), "coder0")
+		if err != nil {
+			return nil, xerrors.Errorf("create tun: %w", err)
+		}
+
+		r, err := router.New(Logger(options.Logger.Named("net.router")), tunDev, sys.NetMon.Get())
+		if err != nil {
+			return nil, xerrors.Errorf("create router: %w", err)
+		}
+		sys.Set(r)
+
+		dnsDev, err = dns.NewOSConfigurator(Logger(options.Logger.Named("net.dns")), devName)
+		if err != nil {
+			tunDev.Close()
+			r.Close()
+			return nil, xerrors.Errorf("create dns: %w", err)
+		}
+	}
 	wireguardEngine, err := wgengine.NewUserspaceEngine(Logger(options.Logger.Named("net.wgengine")), wgengine.Config{
 		NetMon:       wireguardMonitor,
 		Dialer:       dialer,
 		ListenPort:   options.ListenPort,
 		SetSubsystem: sys.Set,
+		Tun:          tunDev,
+		Router:       sys.Router.Get(),
+		DNS:          dnsDev,
 	})
 	if err != nil {
 		return nil, xerrors.Errorf("create wgengine: %w", err)
@@ -161,11 +195,15 @@ func NewConn(options *Options) (conn *Conn, err error) {
 			wireguardEngine.Close()
 		}
 	}()
-	dialer.UseNetstackForIP = func(ip netip.Addr) bool {
-		_, ok := wireguardEngine.PeerForIP(ip)
-		return ok
+
+	if userspaceNetworking {
+		dialer.UseNetstackForIP = func(ip netip.Addr) bool {
+			_, ok := wireguardEngine.PeerForIP(ip)
+			return ok
+		}
 	}
 
+	wireguardEngine = wgengine.NewWatchdog(wireguardEngine)
 	sys.Set(wireguardEngine)
 
 	magicConn := sys.MagicSock.Get()
@@ -203,12 +241,14 @@ func NewConn(options *Options) (conn *Conn, err error) {
 	if err != nil {
 		return nil, xerrors.Errorf("create netstack: %w", err)
 	}
+	// sys.Set(netStack)
 
-	dialer.NetstackDialTCP = func(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
-		return netStack.DialContextTCP(ctx, dst)
+	if userspaceNetworking {
+		dialer.NetstackDialTCP = func(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
+			return netStack.DialContextTCP(ctx, dst)
+		}
+		netStack.ProcessLocalIPs = true
 	}
-	netStack.ProcessLocalIPs = true
-	wireguardEngine = wgengine.NewWatchdog(wireguardEngine)
 
 	cfgMaps := newConfigMaps(
 		options.Logger,
@@ -233,6 +273,10 @@ func NewConn(options *Options) (conn *Conn, err error) {
 	wireguardEngine.SetStatusCallback(nodeUp.setStatus)
 	wireguardEngine.SetNetInfoCallback(nodeUp.setNetInfo)
 	magicConn.SetDERPForcedWebsocketCallback(nodeUp.setDERPForcedWebsocket)
+
+	// if w, ok := sys.Tun.GetOK(); ok {
+	// 	w.Start()
+	// }
 
 	server := &Conn{
 		closed:           make(chan struct{}),
