@@ -271,6 +271,11 @@ func (c *configMaps) derpMapLocked() *tailcfg.DERPMap {
 	return c.derpMap.Clone()
 }
 
+var ServicePrefix = netip.PrefixFrom(
+	netip.AddrFrom16([16]byte{0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0}),
+	48,
+)
+
 // reconfig computes the correct wireguard config and calls the engine.Reconfig
 // with the config we have.  It is not intended for this to be called outside of
 // the updateLoop()
@@ -283,7 +288,10 @@ func (c *configMaps) reconfig(nm *netmap.NetworkMap) {
 		return
 	}
 
-	rc := &router.Config{LocalAddrs: nm.Addresses}
+	rc := &router.Config{
+		LocalAddrs: nm.Addresses,
+		Routes:     []netip.Prefix{ServicePrefix},
+	}
 	err = c.engine.Reconfig(cfg, rc, &dns.Config{}, &tailcfg.Debug{})
 	if err != nil {
 		if errors.Is(err, wgengine.ErrNoChanges) {

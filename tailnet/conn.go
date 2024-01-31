@@ -57,7 +57,8 @@ const (
 // with the debug level enabled.
 const EnvMagicsockDebugLogging = "CODER_MAGICSOCK_DEBUG_LOGGING"
 
-const userspaceNetworking bool = false
+// const userspaceNetworking bool = false
+var userspaceNetworking = os.Getenv("CODER_USERSPACE") != ""
 
 func init() {
 	// Globally disable network namespacing. All networking happens in
@@ -155,26 +156,27 @@ func NewConn(options *Options) (conn *Conn, err error) {
 	sys.Set(dialer)
 
 	var (
-		tunDev  tun.Device
-		devName string
-		dnsDev  dns.OSConfigurator
+		tunDev     tun.Device
+		tunDevName string
+		dnsDev     dns.OSConfigurator
+		rr         router.Router
 	)
 	if !userspaceNetworking {
-		tunDev, devName, err = tstun.New(Logger(options.Logger.Named("net.tun")), "coder0")
+		tunDev, tunDevName, err = tstun.New(Logger(options.Logger.Named("net.tun")), "coder0")
 		if err != nil {
 			return nil, xerrors.Errorf("create tun: %w", err)
 		}
 
-		r, err := router.New(Logger(options.Logger.Named("net.router")), tunDev, sys.NetMon.Get())
+		rr, err = router.New(Logger(options.Logger.Named("net.router")), tunDev, sys.NetMon.Get())
 		if err != nil {
 			return nil, xerrors.Errorf("create router: %w", err)
 		}
-		sys.Set(r)
+		sys.Set(rr)
 
-		dnsDev, err = dns.NewOSConfigurator(Logger(options.Logger.Named("net.dns")), devName)
+		dnsDev, err = dns.NewOSConfigurator(Logger(options.Logger.Named("net.dns")), tunDevName)
 		if err != nil {
 			tunDev.Close()
-			r.Close()
+			rr.Close()
 			return nil, xerrors.Errorf("create dns: %w", err)
 		}
 	}
@@ -184,7 +186,7 @@ func NewConn(options *Options) (conn *Conn, err error) {
 		ListenPort:   options.ListenPort,
 		SetSubsystem: sys.Set,
 		Tun:          tunDev,
-		Router:       sys.Router.Get(),
+		Router:       rr,
 		DNS:          dnsDev,
 	})
 	if err != nil {
@@ -241,7 +243,6 @@ func NewConn(options *Options) (conn *Conn, err error) {
 	if err != nil {
 		return nil, xerrors.Errorf("create netstack: %w", err)
 	}
-	// sys.Set(netStack)
 
 	if userspaceNetworking {
 		dialer.NetstackDialTCP = func(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
