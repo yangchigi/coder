@@ -40,6 +40,7 @@ func (r *RootCmd) workspaceAgent() *clibase.Cmd {
 	var (
 		auth                string
 		logDir              string
+		runDir              string
 		pprofAddress        string
 		noReap              bool
 		sshMaxTimeout       time.Duration
@@ -284,6 +285,7 @@ func (r *RootCmd) workspaceAgent() *clibase.Cmd {
 				Client:            client,
 				Logger:            logger,
 				LogDir:            logDir,
+				RunDir:            runDir,
 				TailnetListenPort: uint16(tailnetListenPort),
 				ExchangeToken: func(ctx context.Context) (string, error) {
 					if exchangeToken == nil {
@@ -336,6 +338,13 @@ func (r *RootCmd) workspaceAgent() *clibase.Cmd {
 			Description: "Specify the location for the agent log files.",
 			Env:         "CODER_AGENT_LOG_DIR",
 			Value:       clibase.StringOf(&logDir),
+		},
+		{
+			Flag:        "run-dir",
+			Default:     os.TempDir(),
+			Description: "Specify the location for the agent run files.",
+			Env:         "CODER_AGENT_RUN_DIR",
+			Value:       clibase.StringOf(&runDir),
 		},
 		{
 			Flag:        "pprof-address",

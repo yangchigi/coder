@@ -65,6 +65,7 @@ const EnvProcPrioMgmt = "CODER_PROC_PRIO_MGMT"
 type Options struct {
 	Filesystem                   afero.Fs
 	LogDir                       string
+	RunDir                       string
 	TempDir                      string
 	ExchangeToken                func(ctx context.Context) (string, error)
 	Client                       Client
@@ -115,6 +116,12 @@ func New(options Options) Agent {
 			options.Logger.Debug(context.Background(), "log dir not set, using temp dir", slog.F("temp_dir", options.TempDir))
 		}
 		options.LogDir = options.TempDir
+	}
+	if options.RunDir == "" {
+		if options.TempDir != os.TempDir() {
+			options.Logger.Debug(context.Background(), "run dir not set, using temp dir", slog.F("temp_dir", options.TempDir))
+		}
+		options.RunDir = options.TempDir
 	}
 	if options.ExchangeToken == nil {
 		options.ExchangeToken = func(ctx context.Context) (string, error) {
