@@ -1,42 +1,34 @@
-import { css } from "@emotion/css";
-import { useTheme, type Interpolation, type Theme } from "@emotion/react";
+import { type Interpolation, type Theme } from "@emotion/react";
 import TextField from "@mui/material/TextField";
-import type * as TypesGen from "api/typesGenerated";
-import { UserAutocomplete } from "components/UserAutocomplete/UserAutocomplete";
+import Button from "@mui/material/Button";
+import FormHelperText from "@mui/material/FormHelperText";
 import { FormikContextType, useFormik } from "formik";
-import { type FC, useEffect, useState } from "react";
+import { type FC, useEffect, useState, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+import * as Yup from "yup";
+import type * as TypesGen from "api/typesGenerated";
 import {
   getFormHelpers,
   nameValidator,
   onChangeTrimmed,
 } from "utils/formUtils";
-import * as Yup from "yup";
 import {
   FormFields,
   FormSection,
   FormFooter,
   HorizontalForm,
 } from "components/Form/Form";
+import { UserAutocomplete } from "components/UserAutocomplete/UserAutocomplete";
 import {
+  AutofillBuildParameter,
+  AutofillSource,
   getInitialRichParameterValues,
   useValidationSchemaForRichParameters,
 } from "utils/richParameters";
-import {
-  ImmutableTemplateParametersSection,
-  MutableTemplateParametersSection,
-} from "components/TemplateParameters/TemplateParameters";
 import { ErrorAlert } from "components/Alert/ErrorAlert";
 import { Stack } from "components/Stack/Stack";
-import {
-  CreateWorkspaceMode,
-  ExternalAuthPollingState,
-} from "./CreateWorkspacePage";
-import { useSearchParams } from "react-router-dom";
-import { CreateWSPermissions } from "./permissions";
 import { Alert } from "components/Alert/Alert";
-import { ExternalAuthBanner } from "./ExternalAuthBanner/ExternalAuthBanner";
 import { Margins } from "components/Margins/Margins";
-import Button from "@mui/material/Button";
 import { Avatar } from "components/Avatar/Avatar";
 import {
   PageHeader,
@@ -44,6 +36,14 @@ import {
   PageHeaderSubtitle,
 } from "components/PageHeader/PageHeader";
 import { Pill } from "components/Pill/Pill";
+import { RichParameterInput } from "components/RichParameterInput/RichParameterInput";
+import { generateWorkspaceName } from "modules/workspaces/generateWorkspaceName";
+import {
+  CreateWorkspaceMode,
+  ExternalAuthPollingState,
+} from "./CreateWorkspacePage";
+import { ExternalAuthBanner } from "./ExternalAuthBanner/ExternalAuthBanner";
+import { CreateWSPermissions } from "./permissions";
 
 export const Language = {
   duplicationWarning:
@@ -54,7 +54,7 @@ export interface CreateWorkspacePageViewProps {
   mode: CreateWorkspaceMode;
   error: unknown;
   resetMutation: () => void;
-  defaultName: string;
+  defaultName?: string | null;
   defaultOwner: TypesGen.User;
   template: TypesGen.Template;
   versionId?: string;
@@ -62,7 +62,7 @@ export interface CreateWorkspacePageViewProps {
   externalAuthPollingState: ExternalAuthPollingState;
   startPollingExternalAuth: () => void;
   parameters: TypesGen.TemplateVersionParameter[];
-  defaultBuildParameters: TypesGen.WorkspaceBuildParameter[];
+  autofillParameters: AutofillBuildParameter[];
   permissions: CreateWSPermissions;
   creatingWorkspace: boolean;
   onCancel: () => void;
@@ -84,26 +84,32 @@ export const CreateWorkspacePageView: FC<CreateWorkspacePageViewProps> = ({
   externalAuthPollingState,
   startPollingExternalAuth,
   parameters,
-  defaultBuildParameters,
+  autofillParameters,
   permissions,
   creatingWorkspace,
   onSubmit,
   onCancel,
 }) => {
-  const theme = useTheme();
   const [owner, setOwner] = useState(defaultOwner);
   const [searchParams] = useSearchParams();
   const disabledParamsList = searchParams?.get("disable_params")?.split(",");
   const requiresExternalAuth = externalAuth.some((auth) => !auth.authenticated);
+  const [suggestedName, setSuggestedName] = useState(() =>
+    generateWorkspaceName(),
+  );
+
+  const rerollSuggestedName = useCallback(() => {
+    setSuggestedName(() => generateWorkspaceName());
+  }, []);
 
   const form: FormikContextType<TypesGen.CreateWorkspaceRequest> =
     useFormik<TypesGen.CreateWorkspaceRequest>({
       initialValues: {
-        name: defaultName,
+        name: defaultName ?? "",
         template_id: template.id,
         rich_parameter_values: getInitialRichParameterValues(
           parameters,
-          defaultBuildParameters,
+          autofillParameters,
         ),
       },
       validationSchema: Yup.object({
@@ -130,6 +136,16 @@ export const CreateWorkspacePageView: FC<CreateWorkspacePageViewProps> = ({
     form,
     error,
   );
+
+  const autofillSources = useMemo(() => {
+    return autofillParameters.reduce(
+      (acc, param) => {
+        acc[param.name] = param.source;
+        return acc;
+      },
+      {} as Record<string, AutofillSource>,
+    );
+  }, [autofillParameters]);
 
   return (
     <Margins size="medium">
@@ -198,16 +214,29 @@ export const CreateWorkspacePageView: FC<CreateWorkspacePageViewProps> = ({
                   </span>
                 </Stack>
               )}
-
-              <TextField
-                {...getFieldHelpers("name")}
-                disabled={creatingWorkspace}
-                // resetMutation facilitates the clearing of validation errors
-                onChange={onChangeTrimmed(form, resetMutation)}
-                autoFocus
-                fullWidth
-                label="Workspace Name"
-              />
+              <div>
+                <TextField
+                  {...getFieldHelpers("name")}
+                  disabled={creatingWorkspace}
+                  // resetMutation facilitates the clearing of validation errors
+                  onChange={onChangeTrimmed(form, resetMutation)}
+                  fullWidth
+                  label="Workspace Name"
+                />
+                <FormHelperText data-chromatic="ignore">
+                  Need a suggestion?{" "}
+                  <Button
+                    variant="text"
+                    css={styles.nameSuggestion}
+                    onClick={async () => {
+                      await form.setFieldValue("name", suggestedName);
+                      rerollSuggestedName();
+                    }}
+                  >
+                    {suggestedName}
+                  </Button>
+                </FormHelperText>
+              </div>
 
               {permissions.createWorkspaceForUser && (
                 <UserAutocomplete
@@ -222,65 +251,42 @@ export const CreateWorkspacePageView: FC<CreateWorkspacePageViewProps> = ({
             </FormFields>
           </FormSection>
 
-          {parameters && (
-            <>
-              <MutableTemplateParametersSection
-                templateParameters={parameters}
-                getInputProps={(parameter, index) => {
-                  return {
-                    ...getFieldHelpers(
-                      "rich_parameter_values[" + index + "].value",
-                    ),
-                    onChange: async (value) => {
-                      await form.setFieldValue(
-                        "rich_parameter_values." + index,
-                        {
+          {parameters.length > 0 && (
+            <FormSection
+              title="Parameters"
+              description="These are the settings used by your template. Please note that immutable parameters cannot be modified once the workspace is created."
+            >
+              {/*
+                Opted not to use FormFields in order to increase spacing.
+                This decision was made because rich parameter inputs are more visually dense than standard text fields.
+              */}
+              <div css={{ display: "flex", flexDirection: "column", gap: 36 }}>
+                {parameters.map((parameter, index) => {
+                  const parameterField = `rich_parameter_values.${index}`;
+                  const parameterInputName = `${parameterField}.value`;
+                  const isDisabled =
+                    disabledParamsList?.includes(
+                      parameter.name.toLowerCase().replace(/ /g, "_"),
+                    ) || creatingWorkspace;
+
+                  return (
+                    <RichParameterInput
+                      {...getFieldHelpers(parameterInputName)}
+                      onChange={async (value) => {
+                        await form.setFieldValue(parameterField, {
                           name: parameter.name,
-                          value: value,
-                        },
-                      );
-                    },
-                    disabled:
-                      disabledParamsList?.includes(
-                        parameter.name.toLowerCase().replace(/ /g, "_"),
-                      ) || creatingWorkspace,
-                  };
-                }}
-              />
-              <ImmutableTemplateParametersSection
-                templateParameters={parameters}
-                classes={{
-                  root: css`
-                    border: 1px solid ${theme.palette.warning.light};
-                    border-radius: 8px;
-                    background-color: ${theme.palette.background.paper};
-                    padding: 80px;
-                    margin-left: -80px;
-                    margin-right: -80px;
-                  `,
-                }}
-                getInputProps={(parameter, index) => {
-                  return {
-                    ...getFieldHelpers(
-                      "rich_parameter_values[" + index + "].value",
-                    ),
-                    onChange: async (value) => {
-                      await form.setFieldValue(
-                        "rich_parameter_values." + index,
-                        {
-                          name: parameter.name,
-                          value: value,
-                        },
-                      );
-                    },
-                    disabled:
-                      disabledParamsList?.includes(
-                        parameter.name.toLowerCase().replace(/ /g, "_"),
-                      ) || creatingWorkspace,
-                  };
-                }}
-              />
-            </>
+                          value,
+                        });
+                      }}
+                      autofillSource={autofillSources[parameter.name]}
+                      key={parameter.name}
+                      parameter={parameter}
+                      disabled={isDisabled}
+                    />
+                  );
+                })}
+              </div>
+            </FormSection>
           )}
 
           <FormFooter
@@ -295,6 +301,13 @@ export const CreateWorkspacePageView: FC<CreateWorkspacePageViewProps> = ({
 };
 
 const styles = {
+  nameSuggestion: (theme) => ({
+    color: theme.roles.info.fill.solid,
+    padding: "4px 8px",
+    lineHeight: "inherit",
+    fontSize: "inherit",
+    height: "unset",
+  }),
   hasDescription: {
     paddingBottom: 16,
   },

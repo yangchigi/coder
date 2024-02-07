@@ -32,6 +32,7 @@ import (
 	tslogger "tailscale.com/types/logger"
 	"tailscale.com/types/netlogtype"
 	"tailscale.com/wgengine"
+	"tailscale.com/wgengine/capture"
 	"tailscale.com/wgengine/magicsock"
 	"tailscale.com/wgengine/netstack"
 	"tailscale.com/wgengine/router"
@@ -353,6 +354,12 @@ type Conn struct {
 	listeners        map[listenKey]*listener
 
 	trafficStats *connstats.Statistics
+}
+
+func (c *Conn) InstallCaptureHook(f capture.Callback) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.wireguardEngine.InstallCaptureHook(f)
 }
 
 func (c *Conn) MagicsockSetDebugLoggingEnabled(enabled bool) {

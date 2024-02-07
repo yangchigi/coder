@@ -52,6 +52,7 @@ import (
 	"github.com/coder/coder/v2/agent/agentproc/agentproctest"
 	"github.com/coder/coder/v2/agent/agentssh"
 	"github.com/coder/coder/v2/agent/agenttest"
+	"github.com/coder/coder/v2/agent/proto"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/codersdk/agentsdk"
 	"github.com/coder/coder/v2/pty/ptytest"
@@ -85,11 +86,11 @@ func TestAgent_Stats_SSH(t *testing.T) {
 	err = session.Shell()
 	require.NoError(t, err)
 
-	var s *agentsdk.Stats
+	var s *proto.Stats
 	require.Eventuallyf(t, func() bool {
 		var ok bool
 		s, ok = <-stats
-		return ok && s.ConnectionCount > 0 && s.RxBytes > 0 && s.TxBytes > 0 && s.SessionCountSSH == 1
+		return ok && s.ConnectionCount > 0 && s.RxBytes > 0 && s.TxBytes > 0 && s.SessionCountSsh == 1
 	}, testutil.WaitLong, testutil.IntervalFast,
 		"never saw stats: %+v", s,
 	)
@@ -118,11 +119,11 @@ func TestAgent_Stats_ReconnectingPTY(t *testing.T) {
 	_, err = ptyConn.Write(data)
 	require.NoError(t, err)
 
-	var s *agentsdk.Stats
+	var s *proto.Stats
 	require.Eventuallyf(t, func() bool {
 		var ok bool
 		s, ok = <-stats
-		return ok && s.ConnectionCount > 0 && s.RxBytes > 0 && s.TxBytes > 0 && s.SessionCountReconnectingPTY == 1
+		return ok && s.ConnectionCount > 0 && s.RxBytes > 0 && s.TxBytes > 0 && s.SessionCountReconnectingPty == 1
 	}, testutil.WaitLong, testutil.IntervalFast,
 		"never saw stats: %+v", s,
 	)
@@ -177,14 +178,14 @@ func TestAgent_Stats_Magic(t *testing.T) {
 		require.Eventuallyf(t, func() bool {
 			s, ok := <-stats
 			t.Logf("got stats: ok=%t, ConnectionCount=%d, RxBytes=%d, TxBytes=%d, SessionCountVSCode=%d, ConnectionMedianLatencyMS=%f",
-				ok, s.ConnectionCount, s.RxBytes, s.TxBytes, s.SessionCountVSCode, s.ConnectionMedianLatencyMS)
+				ok, s.ConnectionCount, s.RxBytes, s.TxBytes, s.SessionCountVscode, s.ConnectionMedianLatencyMs)
 			return ok && s.ConnectionCount > 0 && s.RxBytes > 0 && s.TxBytes > 0 &&
 				// Ensure that the connection didn't count as a "normal" SSH session.
 				// This was a special one, so it should be labeled specially in the stats!
-				s.SessionCountVSCode == 1 &&
+				s.SessionCountVscode == 1 &&
 				// Ensure that connection latency is being counted!
 				// If it isn't, it's set to -1.
-				s.ConnectionMedianLatencyMS >= 0
+				s.ConnectionMedianLatencyMs >= 0
 		}, testutil.WaitLong, testutil.IntervalFast,
 			"never saw stats",
 		)
@@ -243,9 +244,9 @@ func TestAgent_Stats_Magic(t *testing.T) {
 		require.Eventuallyf(t, func() bool {
 			s, ok := <-stats
 			t.Logf("got stats with conn open: ok=%t, ConnectionCount=%d, SessionCountJetBrains=%d",
-				ok, s.ConnectionCount, s.SessionCountJetBrains)
+				ok, s.ConnectionCount, s.SessionCountJetbrains)
 			return ok && s.ConnectionCount > 0 &&
-				s.SessionCountJetBrains == 1
+				s.SessionCountJetbrains == 1
 		}, testutil.WaitLong, testutil.IntervalFast,
 			"never saw stats with conn open",
 		)
@@ -258,9 +259,9 @@ func TestAgent_Stats_Magic(t *testing.T) {
 		require.Eventuallyf(t, func() bool {
 			s, ok := <-stats
 			t.Logf("got stats after disconnect %t, %d",
-				ok, s.SessionCountJetBrains)
+				ok, s.SessionCountJetbrains)
 			return ok &&
-				s.SessionCountJetBrains == 0
+				s.SessionCountJetbrains == 0
 		}, testutil.WaitLong, testutil.IntervalFast,
 			"never saw stats after conn closes",
 		)
@@ -1346,7 +1347,7 @@ func TestAgent_Lifecycle(t *testing.T) {
 					RunOnStop: true,
 				}},
 			},
-			make(chan *agentsdk.Stats, 50),
+			make(chan *proto.Stats, 50),
 			tailnet.NewCoordinator(logger),
 		)
 		defer client.Close()
@@ -1394,56 +1395,52 @@ func TestAgent_Startup(t *testing.T) {
 
 	t.Run("EmptyDirectory", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
 
 		_, client, _, _, _ := setupAgent(t, agentsdk.Manifest{
 			Directory: "",
 		}, 0)
-		assert.Eventually(t, func() bool {
-			return client.GetStartup().Version != ""
-		}, testutil.WaitShort, testutil.IntervalFast)
-		require.Equal(t, "", client.GetStartup().ExpandedDirectory)
+		startup := testutil.RequireRecvCtx(ctx, t, client.GetStartup())
+		require.Equal(t, "", startup.GetExpandedDirectory())
 	})
 
 	t.Run("HomeDirectory", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
 
 		_, client, _, _, _ := setupAgent(t, agentsdk.Manifest{
 			Directory: "~",
 		}, 0)
-		assert.Eventually(t, func() bool {
-			return client.GetStartup().Version != ""
-		}, testutil.WaitShort, testutil.IntervalFast)
+		startup := testutil.RequireRecvCtx(ctx, t, client.GetStartup())
 		homeDir, err := os.UserHomeDir()
 		require.NoError(t, err)
-		require.Equal(t, homeDir, client.GetStartup().ExpandedDirectory)
+		require.Equal(t, homeDir, startup.GetExpandedDirectory())
 	})
 
 	t.Run("NotAbsoluteDirectory", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
 
 		_, client, _, _, _ := setupAgent(t, agentsdk.Manifest{
 			Directory: "coder/coder",
 		}, 0)
-		assert.Eventually(t, func() bool {
-			return client.GetStartup().Version != ""
-		}, testutil.WaitShort, testutil.IntervalFast)
+		startup := testutil.RequireRecvCtx(ctx, t, client.GetStartup())
 		homeDir, err := os.UserHomeDir()
 		require.NoError(t, err)
-		require.Equal(t, filepath.Join(homeDir, "coder/coder"), client.GetStartup().ExpandedDirectory)
+		require.Equal(t, filepath.Join(homeDir, "coder/coder"), startup.GetExpandedDirectory())
 	})
 
 	t.Run("HomeEnvironmentVariable", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
 
 		_, client, _, _, _ := setupAgent(t, agentsdk.Manifest{
 			Directory: "$HOME",
 		}, 0)
-		assert.Eventually(t, func() bool {
-			return client.GetStartup().Version != ""
-		}, testutil.WaitShort, testutil.IntervalFast)
+		startup := testutil.RequireRecvCtx(ctx, t, client.GetStartup())
 		homeDir, err := os.UserHomeDir()
 		require.NoError(t, err)
-		require.Equal(t, homeDir, client.GetStartup().ExpandedDirectory)
+		require.Equal(t, homeDir, startup.GetExpandedDirectory())
 	})
 }
 
@@ -1671,7 +1668,7 @@ func TestAgent_UpdatedDERP(t *testing.T) {
 		_ = coordinator.Close()
 	})
 	agentID := uuid.New()
-	statsCh := make(chan *agentsdk.Stats, 50)
+	statsCh := make(chan *proto.Stats, 50)
 	fs := afero.NewMemMapFs()
 	client := agenttest.NewClient(t,
 		logger.Named("agent"),
@@ -1820,7 +1817,7 @@ func TestAgent_Reconnect(t *testing.T) {
 	defer coordinator.Close()
 
 	agentID := uuid.New()
-	statsCh := make(chan *agentsdk.Stats, 50)
+	statsCh := make(chan *proto.Stats, 50)
 	derpMap, _ := tailnettest.RunDERPAndSTUN(t)
 	client := agenttest.NewClient(t,
 		logger,
@@ -1865,7 +1862,7 @@ func TestAgent_WriteVSCodeConfigs(t *testing.T) {
 			GitAuthConfigs: 1,
 			DERPMap:        &tailcfg.DERPMap{},
 		},
-		make(chan *agentsdk.Stats, 50),
+		make(chan *proto.Stats, 50),
 		coordinator,
 	)
 	defer client.Close()
@@ -2022,11 +2019,15 @@ func setupSSHSession(
 func setupAgent(t *testing.T, metadata agentsdk.Manifest, ptyTimeout time.Duration, opts ...func(*agenttest.Client, *agent.Options)) (
 	*codersdk.WorkspaceAgentConn,
 	*agenttest.Client,
-	<-chan *agentsdk.Stats,
+	<-chan *proto.Stats,
 	afero.Fs,
 	agent.Agent,
 ) {
-	logger := slogtest.Make(t, nil).Leveled(slog.LevelDebug)
+	logger := slogtest.Make(t, &slogtest.Options{
+		// Agent can drop errors when shutting down, and some, like the
+		// fasthttplistener connection closed error, are unexported.
+		IgnoreErrors: true,
+	}).Leveled(slog.LevelDebug)
 	if metadata.DERPMap == nil {
 		metadata.DERPMap, _ = tailnettest.RunDERPAndSTUN(t)
 	}
@@ -2039,11 +2040,14 @@ func setupAgent(t *testing.T, metadata agentsdk.Manifest, ptyTimeout time.Durati
 	if metadata.WorkspaceName == "" {
 		metadata.WorkspaceName = "test-workspace"
 	}
+	if metadata.WorkspaceID == uuid.Nil {
+		metadata.WorkspaceID = uuid.New()
+	}
 	coordinator := tailnet.NewCoordinator(logger)
 	t.Cleanup(func() {
 		_ = coordinator.Close()
 	})
-	statsCh := make(chan *agentsdk.Stats, 50)
+	statsCh := make(chan *proto.Stats, 50)
 	fs := afero.NewMemMapFs()
 	c := agenttest.NewClient(t, logger.Named("agent"), metadata.AgentID, metadata, statsCh, coordinator)
 	t.Cleanup(c.Close)

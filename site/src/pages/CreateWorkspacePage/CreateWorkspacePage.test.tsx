@@ -176,7 +176,9 @@ describe("CreateWorkspacePage", () => {
         "me",
         expect.objectContaining({
           template_id: MockTemplate.id,
-          rich_parameter_values: [{ name: param, value: paramValue }],
+          rich_parameter_values: [
+            expect.objectContaining({ name: param, value: paramValue }),
+          ],
         }),
       );
     });
@@ -201,7 +203,9 @@ describe("CreateWorkspacePage", () => {
         "me",
         expect.objectContaining({
           template_version_id: MockTemplate.active_version_id,
-          rich_parameter_values: [{ name: param, value: paramValue }],
+          rich_parameter_values: [
+            expect.objectContaining({ name: param, value: paramValue }),
+          ],
         }),
       );
     });
@@ -210,7 +214,7 @@ describe("CreateWorkspacePage", () => {
   it("Detects when a workspace is being created with the 'duplicate' mode", async () => {
     const params = new URLSearchParams({
       mode: "duplicate",
-      name: MockWorkspace.name,
+      name: `${MockWorkspace.name}-copy`,
       version: MockWorkspace.template_active_version_id,
     });
 

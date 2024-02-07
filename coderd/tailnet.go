@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/xerrors"
 	"tailscale.com/derp"
@@ -22,7 +23,6 @@ import (
 	"cdr.dev/slog"
 	"github.com/coder/coder/v2/coderd/tracing"
 	"github.com/coder/coder/v2/coderd/workspaceapps"
-	"github.com/coder/coder/v2/coderd/wsconncache"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/site"
 	"github.com/coder/coder/v2/tailnet"
@@ -41,8 +41,7 @@ func init() {
 
 var _ workspaceapps.AgentProvider = (*ServerTailnet)(nil)
 
-// NewServerTailnet creates a new tailnet intended for use by coderd. It
-// automatically falls back to wsconncache if a legacy agent is encountered.
+// NewServerTailnet creates a new tailnet intended for use by coderd.
 func NewServerTailnet(
 	ctx context.Context,
 	logger slog.Logger,
@@ -50,7 +49,6 @@ func NewServerTailnet(
 	derpMapFn func() *tailcfg.DERPMap,
 	derpForceWebSockets bool,
 	getMultiAgent func(context.Context) (tailnet.MultiAgentConn, error),
-	cache *wsconncache.Cache,
 	traceProvider trace.TracerProvider,
 ) (*ServerTailnet, error) {
 	logger = logger.Named("servertailnet")
@@ -97,21 +95,31 @@ func NewServerTailnet(
 		conn:                 conn,
 		coordinatee:          conn,
 		getMultiAgent:        getMultiAgent,
-		cache:                cache,
 		agentConnectionTimes: map[uuid.UUID]time.Time{},
 		agentTickets:         map[uuid.UUID]map[uuid.UUID]struct{}{},
 		transport:            tailnetTransport.Clone(),
+		connsPerAgent: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: "coder",
+			Subsystem: "servertailnet",
+			Name:      "open_connections",
+			Help:      "Total number of TCP connections currently open to workspace agents.",
+		}, []string{"network"}),
+		totalConns: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "coder",
+			Subsystem: "servertailnet",
+			Name:      "connections_total",
+			Help:      "Total number of TCP connections made to workspace agents.",
+		}, []string{"network"}),
 	}
 	tn.transport.DialContext = tn.dialContext
-
-	// Bugfix: for some reason all calls to tn.dialContext come from
-	// "localhost", causing connections to be cached and requests to go to the
-	// wrong workspaces. This disables keepalives for now until the root cause
-	// can be found.
-	tn.transport.MaxIdleConnsPerHost = -1
-	tn.transport.DisableKeepAlives = true
-
+	// These options are mostly just picked at random, and they can likely be
+	// fine tuned further. Generally, users are running applications in dev mode
+	// which can generate hundreds of requests per page load, so we increased
+	// MaxIdleConnsPerHost from 2 to 6 and removed the limit of total idle
+	// conns.
+	tn.transport.MaxIdleConnsPerHost = 6
 	tn.transport.MaxIdleConns = 0
+	tn.transport.IdleConnTimeout = 10 * time.Minute
 	// We intentionally don't verify the certificate chain here.
 	// The connection to the workspace is already established and most
 	// apps are already going to be accessed over plain HTTP, this config
@@ -175,6 +183,16 @@ func NewServerTailnet(
 	return tn, nil
 }
 
+func (s *ServerTailnet) Describe(descs chan<- *prometheus.Desc) {
+	s.connsPerAgent.Describe(descs)
+	s.totalConns.Describe(descs)
+}
+
+func (s *ServerTailnet) Collect(metrics chan<- prometheus.Metric) {
+	s.connsPerAgent.Collect(metrics)
+	s.totalConns.Collect(metrics)
+}
+
 func (s *ServerTailnet) expireOldAgents() {
 	const (
 		tick   = 5 * time.Minute
@@ -210,12 +228,13 @@ func (s *ServerTailnet) doExpireOldAgents(cutoff time.Duration) {
 		// If no one has connected since the cutoff and there are no active
 		// connections, remove the agent.
 		if time.Since(lastConnection) > cutoff && len(s.agentTickets[agentID]) == 0 {
-			deletedCount++
-			delete(s.agentConnectionTimes, agentID)
 			err := agentConn.UnsubscribeAgent(agentID)
 			if err != nil {
 				s.logger.Error(ctx, "unsubscribe expired agent", slog.Error(err), slog.F("agent_id", agentID))
+				continue
 			}
+			deletedCount++
+			delete(s.agentConnectionTimes, agentID)
 		}
 	}
 	s.nodesMu.Unlock()
@@ -299,7 +318,6 @@ type ServerTailnet struct {
 
 	getMultiAgent func(context.Context) (tailnet.MultiAgentConn, error)
 	agentConn     atomic.Pointer[tailnet.MultiAgentConn]
-	cache         *wsconncache.Cache
 	nodesMu       sync.Mutex
 	// agentConnectionTimes is a map of agent tailnetNodes the server wants to
 	// keep a connection to. It contains the last time the agent was connected
@@ -309,10 +327,21 @@ type ServerTailnet struct {
 	agentTickets map[uuid.UUID]map[uuid.UUID]struct{}
 
 	transport *http.Transport
+
+	connsPerAgent *prometheus.GaugeVec
+	totalConns    *prometheus.CounterVec
 }
 
-func (s *ServerTailnet) ReverseProxy(targetURL, dashboardURL *url.URL, agentID uuid.UUID) (_ *httputil.ReverseProxy, release func(), _ error) {
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+func (s *ServerTailnet) ReverseProxy(targetURL, dashboardURL *url.URL, agentID uuid.UUID) *httputil.ReverseProxy {
+	// Rewrite the targetURL's Host to point to the agent's IP. This is
+	// necessary because due to TCP connection caching, each agent needs to be
+	// addressed invidivually. Otherwise, all connections get dialed as
+	// "localhost:port", causing connections to be shared across agents.
+	tgt := *targetURL
+	_, port, _ := net.SplitHostPort(tgt.Host)
+	tgt.Host = net.JoinHostPort(tailnet.IPFromUUID(agentID).String(), port)
+
+	proxy := httputil.NewSingleHostReverseProxy(&tgt)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		site.RenderStaticErrorPage(w, r, site.ErrorPageData{
 			Status:       http.StatusBadGateway,
@@ -325,7 +354,7 @@ func (s *ServerTailnet) ReverseProxy(targetURL, dashboardURL *url.URL, agentID u
 	proxy.Director = s.director(agentID, proxy.Director)
 	proxy.Transport = s.transport
 
-	return proxy, func() {}, nil
+	return proxy
 }
 
 type agentIDKey struct{}
@@ -346,7 +375,18 @@ func (s *ServerTailnet) dialContext(ctx context.Context, network, addr string) (
 		return nil, xerrors.Errorf("no agent id attached")
 	}
 
-	return s.DialAgentNetConn(ctx, agentID, network, addr)
+	nc, err := s.DialAgentNetConn(ctx, agentID, network, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	s.connsPerAgent.WithLabelValues("tcp").Inc()
+	s.totalConns.WithLabelValues("tcp").Inc()
+	return &instrumentedConn{
+		Conn:          nc,
+		agentID:       agentID,
+		connsPerAgent: s.connsPerAgent,
+	}, nil
 }
 
 func (s *ServerTailnet) ensureAgent(agentID uuid.UUID) error {
@@ -387,28 +427,17 @@ func (s *ServerTailnet) AgentConn(ctx context.Context, agentID uuid.UUID) (*code
 		ret  func()
 	)
 
-	if s.getAgentConn().AgentIsLegacy(agentID) {
-		s.logger.Debug(s.ctx, "acquiring legacy agent", slog.F("agent_id", agentID))
-		cconn, release, err := s.cache.Acquire(agentID)
-		if err != nil {
-			return nil, nil, xerrors.Errorf("acquire legacy agent conn: %w", err)
-		}
-
-		conn = cconn.WorkspaceAgentConn
-		ret = release
-	} else {
-		s.logger.Debug(s.ctx, "acquiring agent", slog.F("agent_id", agentID))
-		err := s.ensureAgent(agentID)
-		if err != nil {
-			return nil, nil, xerrors.Errorf("ensure agent: %w", err)
-		}
-		ret = s.acquireTicket(agentID)
-
-		conn = codersdk.NewWorkspaceAgentConn(s.conn, codersdk.WorkspaceAgentConnOptions{
-			AgentID:   agentID,
-			CloseFunc: func() error { return codersdk.ErrSkipClose },
-		})
+	s.logger.Debug(s.ctx, "acquiring agent", slog.F("agent_id", agentID))
+	err := s.ensureAgent(agentID)
+	if err != nil {
+		return nil, nil, xerrors.Errorf("ensure agent: %w", err)
 	}
+	ret = s.acquireTicket(agentID)
+
+	conn = codersdk.NewWorkspaceAgentConn(s.conn, codersdk.WorkspaceAgentConnOptions{
+		AgentID:   agentID,
+		CloseFunc: func() error { return codersdk.ErrSkipClose },
+	})
 
 	// Since we now have an open conn, be careful to close it if we error
 	// without returning it to the user.
@@ -458,9 +487,23 @@ func (c *netConnCloser) Close() error {
 
 func (s *ServerTailnet) Close() error {
 	s.cancel()
-	_ = s.cache.Close()
 	_ = s.conn.Close()
 	s.transport.CloseIdleConnections()
 	<-s.derpMapUpdaterClosed
 	return nil
+}
+
+type instrumentedConn struct {
+	net.Conn
+
+	agentID       uuid.UUID
+	closeOnce     sync.Once
+	connsPerAgent *prometheus.GaugeVec
+}
+
+func (c *instrumentedConn) Close() error {
+	c.closeOnce.Do(func() {
+		c.connsPerAgent.WithLabelValues("tcp").Dec()
+	})
+	return c.Conn.Close()
 }

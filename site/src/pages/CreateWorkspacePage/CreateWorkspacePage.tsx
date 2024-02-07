@@ -1,34 +1,31 @@
-import { type FC, useCallback, useState, useEffect, useMemo } from "react";
+import { type FC, useCallback, useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "react-query";
-import {
-  uniqueNamesGenerator,
-  animals,
-  colors,
-  NumberDictionary,
-} from "unique-names-generator";
-import type {
-  TemplateVersionParameter,
-  Workspace,
-  WorkspaceBuildParameter,
-} from "api/typesGenerated";
-import { useMe } from "contexts/auth/useMe";
-import { useOrganizationId } from "contexts/auth/useOrganizationId";
-import { pageTitle } from "utils/page";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { getUserParameters } from "api/api";
 import { checkAuthorization } from "api/queries/authCheck";
 import {
+  richParameters,
   templateByName,
   templateVersionExternalAuth,
-  richParameters,
 } from "api/queries/templates";
 import { autoCreateWorkspace, createWorkspace } from "api/queries/workspaces";
-import { useEffectEvent } from "hooks/hookPolyfills";
-import { paramsUsedToCreateWorkspace } from "utils/workspace";
-import { Loader } from "components/Loader/Loader";
+import type {
+  TemplateVersionParameter,
+  UserParameter,
+  Workspace,
+} from "api/typesGenerated";
 import { ErrorAlert } from "components/Alert/ErrorAlert";
-import { CreateWSPermissions, createWorkspaceChecks } from "./permissions";
+import { Loader } from "components/Loader/Loader";
+import { useMe } from "contexts/auth/useMe";
+import { useOrganizationId } from "contexts/auth/useOrganizationId";
+import { useEffectEvent } from "hooks/hookPolyfills";
+import { pageTitle } from "utils/page";
+import { AutofillBuildParameter } from "utils/richParameters";
+import { paramsUsedToCreateWorkspace } from "utils/workspace";
 import { CreateWorkspacePageView } from "./CreateWorkspacePageView";
+import { CreateWSPermissions, createWorkspaceChecks } from "./permissions";
+import { generateWorkspaceName } from "modules/workspaces/generateWorkspaceName";
 
 export const createWorkspaceModes = ["form", "auto", "duplicate"] as const;
 export type CreateWorkspaceMode = (typeof createWorkspaceModes)[number];
@@ -41,18 +38,10 @@ const CreateWorkspacePage: FC = () => {
   const me = useMe();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const defaultBuildParameters = getDefaultBuildParameters(searchParams);
   const mode = getWorkspaceMode(searchParams);
   const customVersionId = searchParams.get("version") ?? undefined;
 
-  const defaultName = useMemo(() => {
-    const paramsName = searchParams.get("name");
-    if (mode === "duplicate" && paramsName) {
-      return `${paramsName}-copy`;
-    }
-
-    return paramsName ?? generateUniqueName();
-  }, [mode, searchParams]);
+  const defaultName = searchParams.get("name");
 
   const queryClient = useQueryClient();
   const autoCreateWorkspaceMutation = useMutation(
@@ -61,6 +50,13 @@ const CreateWorkspacePage: FC = () => {
   const createWorkspaceMutation = useMutation(createWorkspace(queryClient));
 
   const templateQuery = useQuery(templateByName(organizationId, templateName));
+
+  const userParametersQuery = useQuery({
+    queryKey: ["userParameters"],
+    queryFn: () => getUserParameters(templateQuery.data!.id),
+    enabled: templateQuery.isSuccess,
+  });
+
   const permissionsQuery = useQuery(
     checkAuthorization({
       checks: createWorkspaceChecks(organizationId),
@@ -101,13 +97,18 @@ const CreateWorkspacePage: FC = () => {
     [navigate],
   );
 
+  const autofillParameters = getAutofillParameters(
+    searchParams,
+    userParametersQuery.data ? userParametersQuery.data : [],
+  );
+
   const automateWorkspaceCreation = useEffectEvent(async () => {
     try {
       const newWorkspace = await autoCreateWorkspaceMutation.mutateAsync({
         templateName,
         organizationId,
-        defaultBuildParameters,
-        defaultName,
+        defaultBuildParameters: autofillParameters,
+        defaultName: defaultName ?? generateWorkspaceName(),
         versionId: realizedVersionId,
       });
 
@@ -139,7 +140,7 @@ const CreateWorkspacePage: FC = () => {
           mode={mode}
           defaultName={defaultName}
           defaultOwner={me}
-          defaultBuildParameters={defaultBuildParameters}
+          autofillParameters={autofillParameters}
           error={createWorkspaceMutation.error}
           resetMutation={createWorkspaceMutation.reset}
           template={templateQuery.data!}
@@ -223,28 +224,35 @@ const useExternalAuth = (versionId: string | undefined) => {
   };
 };
 
-const getDefaultBuildParameters = (
+const getAutofillParameters = (
   urlSearchParams: URLSearchParams,
-): WorkspaceBuildParameter[] => {
-  const buildValues: WorkspaceBuildParameter[] = [];
-  Array.from(urlSearchParams.keys())
+  userParameters: UserParameter[],
+): AutofillBuildParameter[] => {
+  const userParamMap = userParameters.reduce((acc, param) => {
+    acc.set(param.name, param);
+    return acc;
+  }, new Map<string, UserParameter>());
+
+  const buildValues: AutofillBuildParameter[] = Array.from(
+    urlSearchParams.keys(),
+  )
     .filter((key) => key.startsWith("param."))
-    .forEach((key) => {
+    .map((key) => {
       const name = key.replace("param.", "");
       const value = urlSearchParams.get(key) ?? "";
-      buildValues.push({ name, value });
+      // URL should take precedence over user parameters
+      userParamMap.delete(name);
+      return { name, value, source: "url" };
     });
-  return buildValues;
-};
 
-const generateUniqueName = () => {
-  const numberDictionary = NumberDictionary.generate({ min: 0, max: 99 });
-  return uniqueNamesGenerator({
-    dictionaries: [colors, animals, numberDictionary],
-    separator: "-",
-    length: 3,
-    style: "lowerCase",
+  userParamMap.forEach((param) => {
+    buildValues.push({
+      name: param.name,
+      value: param.value,
+      source: "user_history",
+    });
   });
+  return buildValues;
 };
 
 export default CreateWorkspacePage;
