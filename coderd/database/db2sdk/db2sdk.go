@@ -2,6 +2,7 @@
 package db2sdk
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -463,4 +464,87 @@ func ProvisionerDaemon(dbDaemon database.ProvisionerDaemon) codersdk.Provisioner
 		result.Provisioners = append(result.Provisioners, codersdk.ProvisionerType(provisionerType))
 	}
 	return result
+}
+
+func Workspace(
+	requesterID uuid.UUID,
+	workspace database.Workspace,
+	workspaceBuild codersdk.WorkspaceBuild,
+	template database.Template,
+	username string,
+	avatarURL string,
+	allowRenames bool,
+) (codersdk.Workspace, error) {
+	if requesterID == uuid.Nil {
+		return codersdk.Workspace{}, xerrors.Errorf("developer error: requesterID cannot be uuid.Nil!")
+	}
+	var autostartSchedule *string
+	if workspace.AutostartSchedule.Valid {
+		autostartSchedule = &workspace.AutostartSchedule.String
+	}
+
+	var dormantAt *time.Time
+	if workspace.DormantAt.Valid {
+		dormantAt = &workspace.DormantAt.Time
+	}
+
+	var deletingAt *time.Time
+	if workspace.DeletingAt.Valid {
+		deletingAt = &workspace.DeletingAt.Time
+	}
+
+	failingAgents := []uuid.UUID{}
+	for _, resource := range workspaceBuild.Resources {
+		for _, agent := range resource.Agents {
+			if !agent.Health.Healthy {
+				failingAgents = append(failingAgents, agent.ID)
+			}
+		}
+	}
+
+	ttlMillis := convertWorkspaceTTLMillis(workspace.Ttl)
+
+	// Only show favorite status if you own the workspace.
+	requesterFavorite := workspace.OwnerID == requesterID && workspace.Favorite
+
+	return codersdk.Workspace{
+		ID:                                   workspace.ID,
+		CreatedAt:                            workspace.CreatedAt,
+		UpdatedAt:                            workspace.UpdatedAt,
+		OwnerID:                              workspace.OwnerID,
+		OwnerName:                            username,
+		OwnerAvatarURL:                       avatarURL,
+		OrganizationID:                       workspace.OrganizationID,
+		TemplateID:                           workspace.TemplateID,
+		LatestBuild:                          workspaceBuild,
+		TemplateName:                         template.Name,
+		TemplateIcon:                         template.Icon,
+		TemplateDisplayName:                  template.DisplayName,
+		TemplateAllowUserCancelWorkspaceJobs: template.AllowUserCancelWorkspaceJobs,
+		TemplateActiveVersionID:              template.ActiveVersionID,
+		TemplateRequireActiveVersion:         template.RequireActiveVersion,
+		Outdated:                             workspaceBuild.TemplateVersionID.String() != template.ActiveVersionID.String(),
+		Name:                                 workspace.Name,
+		AutostartSchedule:                    autostartSchedule,
+		TTLMillis:                            ttlMillis,
+		LastUsedAt:                           workspace.LastUsedAt,
+		DeletingAt:                           deletingAt,
+		DormantAt:                            dormantAt,
+		Health: codersdk.WorkspaceHealth{
+			Healthy:       len(failingAgents) == 0,
+			FailingAgents: failingAgents,
+		},
+		AutomaticUpdates: codersdk.AutomaticUpdates(workspace.AutomaticUpdates),
+		AllowRenames:     allowRenames,
+		Favorite:         requesterFavorite,
+	}, nil
+}
+
+func convertWorkspaceTTLMillis(i sql.NullInt64) *int64 {
+	if !i.Valid {
+		return nil
+	}
+
+	millis := time.Duration(i.Int64).Milliseconds()
+	return &millis
 }

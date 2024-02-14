@@ -103,7 +103,7 @@ func (api *API) workspace(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w, err := convertWorkspace(
+	w, err := db2sdk.Workspace(
 		apiKey.UserID,
 		workspace,
 		data.builds[0],
@@ -290,7 +290,7 @@ func (api *API) workspaceByOwnerAndName(rw http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	w, err := convertWorkspace(
+	w, err := db2sdk.Workspace(
 		apiKey.UserID,
 		workspace,
 		data.builds[0],
@@ -610,7 +610,7 @@ func (api *API) postWorkspacesByOrganization(rw http.ResponseWriter, r *http.Req
 		return
 	}
 
-	w, err := convertWorkspace(
+	w, err := db2sdk.Workspace(
 		apiKey.UserID,
 		workspace,
 		apiBuild,
@@ -961,7 +961,7 @@ func (api *API) putWorkspaceDormant(rw http.ResponseWriter, r *http.Request) {
 
 	aReq.New = workspace
 
-	w, err := convertWorkspace(
+	w, err := db2sdk.Workspace(
 		apiKey.UserID,
 		workspace,
 		data.builds[0],
@@ -1389,7 +1389,7 @@ func (api *API) watchWorkspace(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w, err := convertWorkspace(
+		w, err := db2sdk.Workspace(
 			apiKey.UserID,
 			workspace,
 			data.builds[0],
@@ -1556,7 +1556,7 @@ func convertWorkspaces(requesterID uuid.UUID, workspaces []database.Workspace, d
 			continue
 		}
 
-		w, err := convertWorkspace(
+		w, err := db2sdk.Workspace(
 			requesterID,
 			workspace,
 			build,
@@ -1572,89 +1572,6 @@ func convertWorkspaces(requesterID uuid.UUID, workspaces []database.Workspace, d
 		apiWorkspaces = append(apiWorkspaces, w)
 	}
 	return apiWorkspaces, nil
-}
-
-func convertWorkspace(
-	requesterID uuid.UUID,
-	workspace database.Workspace,
-	workspaceBuild codersdk.WorkspaceBuild,
-	template database.Template,
-	username string,
-	avatarURL string,
-	allowRenames bool,
-) (codersdk.Workspace, error) {
-	if requesterID == uuid.Nil {
-		return codersdk.Workspace{}, xerrors.Errorf("developer error: requesterID cannot be uuid.Nil!")
-	}
-	var autostartSchedule *string
-	if workspace.AutostartSchedule.Valid {
-		autostartSchedule = &workspace.AutostartSchedule.String
-	}
-
-	var dormantAt *time.Time
-	if workspace.DormantAt.Valid {
-		dormantAt = &workspace.DormantAt.Time
-	}
-
-	var deletingAt *time.Time
-	if workspace.DeletingAt.Valid {
-		deletingAt = &workspace.DeletingAt.Time
-	}
-
-	failingAgents := []uuid.UUID{}
-	for _, resource := range workspaceBuild.Resources {
-		for _, agent := range resource.Agents {
-			if !agent.Health.Healthy {
-				failingAgents = append(failingAgents, agent.ID)
-			}
-		}
-	}
-
-	ttlMillis := convertWorkspaceTTLMillis(workspace.Ttl)
-
-	// Only show favorite status if you own the workspace.
-	requesterFavorite := workspace.OwnerID == requesterID && workspace.Favorite
-
-	return codersdk.Workspace{
-		ID:                                   workspace.ID,
-		CreatedAt:                            workspace.CreatedAt,
-		UpdatedAt:                            workspace.UpdatedAt,
-		OwnerID:                              workspace.OwnerID,
-		OwnerName:                            username,
-		OwnerAvatarURL:                       avatarURL,
-		OrganizationID:                       workspace.OrganizationID,
-		TemplateID:                           workspace.TemplateID,
-		LatestBuild:                          workspaceBuild,
-		TemplateName:                         template.Name,
-		TemplateIcon:                         template.Icon,
-		TemplateDisplayName:                  template.DisplayName,
-		TemplateAllowUserCancelWorkspaceJobs: template.AllowUserCancelWorkspaceJobs,
-		TemplateActiveVersionID:              template.ActiveVersionID,
-		TemplateRequireActiveVersion:         template.RequireActiveVersion,
-		Outdated:                             workspaceBuild.TemplateVersionID.String() != template.ActiveVersionID.String(),
-		Name:                                 workspace.Name,
-		AutostartSchedule:                    autostartSchedule,
-		TTLMillis:                            ttlMillis,
-		LastUsedAt:                           workspace.LastUsedAt,
-		DeletingAt:                           deletingAt,
-		DormantAt:                            dormantAt,
-		Health: codersdk.WorkspaceHealth{
-			Healthy:       len(failingAgents) == 0,
-			FailingAgents: failingAgents,
-		},
-		AutomaticUpdates: codersdk.AutomaticUpdates(workspace.AutomaticUpdates),
-		AllowRenames:     allowRenames,
-		Favorite:         requesterFavorite,
-	}, nil
-}
-
-func convertWorkspaceTTLMillis(i sql.NullInt64) *int64 {
-	if !i.Valid {
-		return nil
-	}
-
-	millis := time.Duration(i.Int64).Milliseconds()
-	return &millis
 }
 
 func validWorkspaceTTLMillis(millis *int64, templateDefault, templateMax time.Duration) (sql.NullInt64, error) {
