@@ -21,7 +21,7 @@ type UseTimeReturnValue<TFormat extends TimeValueFormat, TTransformed> =
     ? TimeValue<TFormat>
     : ReturnType<Transform<TFormat, TTransformed>>;
 
-export type ConfigOptions<
+export type UseTimeConfig<
   TFormat extends TimeValueFormat,
   TTransformed = unknown,
 > = Readonly<{
@@ -36,15 +36,17 @@ export type ConfigOptions<
 
   /**
    * Determines whether the hook will keep re-rendering on the given refresh
-   * interval. If set to false, this hook will never re-render.
+   * interval. This hook will never cause itself to re-render as long as paused
+   * is true.
    *
-   * Defaults to true if not specified.
+   * Defaults to false if not specified.
    */
-  enabled?: boolean;
+  paused?: boolean;
 
   /**
-   * The type of "base value" to store in state on each re-render. Can be
-   * transformed into other values via the config's transform property.
+   * The type of the "base value" stashed inside state in state on each
+   * re-render. Can be transformed into other values via the config's transform
+   * property.
    *
    * Defaults to type "dayjs" if not specified.
    */
@@ -69,17 +71,17 @@ export function useTime<
   TFormat extends TimeValueFormat = "dayjs",
   TTransformed = never,
 >(
-  config?: ConfigOptions<TFormat, TTransformed>,
+  config?: UseTimeConfig<TFormat, TTransformed>,
 ): UseTimeReturnValue<TFormat, TTransformed> {
   const {
     transform,
     refreshIntervalMs = 1_000,
-    enabled = true,
+    paused = false,
     rawTimeFormat = "dayjs",
   } = config ?? {};
 
   // Not a fan of the type assertions, but the alternative would involve
-  // jumping through a bunch of hoops. Not worth it for five lines of code
+  // jumping through a bunch of hoops. Not worth it for a few lines of code
   const createFormattedTimeValue = useEffectEvent(() => {
     type Return = UseTimeReturnValue<TFormat, TTransformed>;
     const newTimeValue = rawTimeFormat === "dayjs" ? dayjs() : new Date();
@@ -92,11 +94,12 @@ export function useTime<
 
   // Have to break the function purity rules on the mounting render by having
   // a non-deterministic value be initialized in state, just so there's always a
-  // value available. But all re-renders go through useEffect and remain pure
+  // value available. But all re-renders go through useEffect, keeping the
+  // render logic 100% pure afterwards
   const [timeValue, setTimeValue] = useState(createFormattedTimeValue);
   useEffect(() => {
-    if (!enabled) {
-      return undefined;
+    if (paused) {
+      return;
     }
 
     const intervalId = window.setInterval(() => {
@@ -104,7 +107,7 @@ export function useTime<
     }, refreshIntervalMs);
 
     return () => window.clearInterval(intervalId);
-  }, [createFormattedTimeValue, refreshIntervalMs, enabled]);
+  }, [createFormattedTimeValue, refreshIntervalMs, paused]);
 
   return timeValue;
 }
