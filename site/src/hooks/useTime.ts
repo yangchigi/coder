@@ -9,14 +9,11 @@
  */
 import { useEffect, useState } from "react";
 import { useEffectEvent } from "./hookPolyfills";
-
-type DayJsValue = {
-  hah: "yeah";
-};
+import dayjs, { type Dayjs } from "dayjs";
 
 type TimeValueFormat = "date" | "dayjs" | undefined;
 type TimeValue<T extends TimeValueFormat> = T extends "dayjs" | undefined
-  ? DayJsValue
+  ? Dayjs
   : T extends "date"
     ? Date
     : never;
@@ -27,16 +24,16 @@ type Transform<TFormat extends TimeValueFormat, TTransformed> = (
   // accidentally be passed in as transform values; synchronous functions only!
 ) => Awaited<TTransformed>;
 
-type UseRelativeTimeReturnValue<
+type UseTimeReturnValue<
   TFormat extends TimeValueFormat,
   TTransformed,
-> = TTransformed extends undefined
+> = TTransformed extends never
   ? TimeValue<TFormat>
   : ReturnType<Transform<TFormat, TTransformed>>;
 
 export type ConfigOptions<
   TFormat extends TimeValueFormat,
-  TTransformed,
+  TTransformed = unknown,
 > = Readonly<{
   /**
    * Determines how often the hook will re-render with a new value. The value is
@@ -80,10 +77,10 @@ export type ConfigOptions<
 
 export function useTime<
   TFormat extends TimeValueFormat = undefined,
-  TTransformed = undefined,
+  TTransformed = never,
 >(
   config?: ConfigOptions<TFormat, TTransformed>,
-): UseRelativeTimeReturnValue<TFormat, TTransformed> {
+): UseTimeReturnValue<TFormat, TTransformed> {
   const {
     transform,
     refreshIntervalMs = 1_000,
@@ -92,18 +89,16 @@ export function useTime<
   } = config ?? {};
 
   const createFormattedTimeValue = useEffectEvent(() => {
-    const newTimeValue =
-      rawTimeFormat === "dayjs" ? { hah: "yeah" } : new Date();
-
+    const newTimeValue = rawTimeFormat === "dayjs" ? dayjs() : new Date();
     const output =
       transform?.(newTimeValue as TimeValue<TFormat>) ?? newTimeValue;
 
-    return output as UseRelativeTimeReturnValue<TFormat, TTransformed>;
+    return output as UseTimeReturnValue<TFormat, TTransformed>;
   });
 
   // Have to break the function purity rules on the mounting render by having
   // a non-deterministic value be initialized in state, just so there's always a
-  // value available, but all re-renders go through useEffect and remain pure
+  // value available. But all re-renders go through useEffect and remain pure
   const [timeValue, setTimeValue] = useState(createFormattedTimeValue);
   useEffect(() => {
     if (!enabled) {
@@ -126,7 +121,7 @@ export function Test() {
     refreshIntervalMs: 5_000,
     enabled: needRefresh,
     rawTimeFormat: "date",
-    transform: () => true as const,
+    // transform: (): Date | undefined => undefined,
   });
 
   return { setNeedRefresh, date } as const;
