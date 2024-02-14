@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useEffectEvent } from "./hookPolyfills";
 import dayjs, { type Dayjs } from "dayjs";
 
-type TimeValueFormat = "date" | "dayjs" | undefined;
-type TimeValue<T extends TimeValueFormat> = T extends "dayjs" | undefined
+type TimeValueFormat = "date" | "dayjs";
+type TimeValue<T extends TimeValueFormat> = T extends "dayjs"
   ? Dayjs
   : T extends "date"
     ? Date
@@ -15,11 +15,11 @@ type Transform<TFormat extends TimeValueFormat, TTransformed> = (
   // accidentally be passed in as transform values; synchronous functions only!
 ) => Awaited<TTransformed>;
 
-type UseTimeReturnValue<TFormat extends TimeValueFormat, TTransformed> = [
-  TTransformed,
-] extends [never]
-  ? TimeValue<TFormat>
-  : ReturnType<Transform<TFormat, TTransformed>>;
+type UseTimeReturnValue<TFormat extends TimeValueFormat, TTransformed> =
+  // Have to use tuples for comparison to avoid type contravariance issues
+  [TTransformed] extends [never]
+    ? TimeValue<TFormat>
+    : ReturnType<Transform<TFormat, TTransformed>>;
 
 export type ConfigOptions<
   TFormat extends TimeValueFormat,
@@ -66,7 +66,7 @@ export type ConfigOptions<
 }>;
 
 export function useTime<
-  TFormat extends TimeValueFormat = undefined,
+  TFormat extends TimeValueFormat = "dayjs",
   TTransformed = never,
 >(
   config?: ConfigOptions<TFormat, TTransformed>,
@@ -78,12 +78,16 @@ export function useTime<
     rawTimeFormat = "dayjs",
   } = config ?? {};
 
+  // Not a fan of the type assertions, but the alternative would involve
+  // jumping through a bunch of hoops. Not worth it for five lines of code
   const createFormattedTimeValue = useEffectEvent(() => {
+    type Return = UseTimeReturnValue<TFormat, TTransformed>;
     const newTimeValue = rawTimeFormat === "dayjs" ? dayjs() : new Date();
-    const output =
-      transform?.(newTimeValue as TimeValue<TFormat>) ?? newTimeValue;
+    if (transform === undefined) {
+      return newTimeValue as Return;
+    }
 
-    return output as UseTimeReturnValue<TFormat, TTransformed>;
+    return transform(newTimeValue as TimeValue<TFormat>) as Return;
   });
 
   // Have to break the function purity rules on the mounting render by having
@@ -103,16 +107,4 @@ export function useTime<
   }, [createFormattedTimeValue, refreshIntervalMs, enabled]);
 
   return timeValue;
-}
-
-export function Test() {
-  const [needRefresh, setNeedRefresh] = useState(true);
-  const date = useTime({
-    refreshIntervalMs: 5_000,
-    enabled: needRefresh,
-    rawTimeFormat: "date",
-    transform: (): Date | undefined => undefined,
-  });
-
-  return { setNeedRefresh, date } as const;
 }
