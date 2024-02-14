@@ -1,12 +1,3 @@
-/**
- * Remaining things to do:
- * @todo Figure out how DayJS values are actually structured
- * @todo Figure out how to turn default TTransformed type param from type
- *       undefined to type never without breaking everything (undefined should
- *       be a valid return type for the transformed function, but the current
- *       setup treats it as a cue to ignore the value, and go with the base
- *       date value)
- */
 import { useEffect, useState } from "react";
 import { useEffectEvent } from "./hookPolyfills";
 import dayjs, { type Dayjs } from "dayjs";
@@ -24,10 +15,9 @@ type Transform<TFormat extends TimeValueFormat, TTransformed> = (
   // accidentally be passed in as transform values; synchronous functions only!
 ) => Awaited<TTransformed>;
 
-type UseTimeReturnValue<
-  TFormat extends TimeValueFormat,
+type UseTimeReturnValue<TFormat extends TimeValueFormat, TTransformed> = [
   TTransformed,
-> = TTransformed extends never
+] extends [never]
   ? TimeValue<TFormat>
   : ReturnType<Transform<TFormat, TTransformed>>;
 
@@ -121,7 +111,7 @@ export function Test() {
     refreshIntervalMs: 5_000,
     enabled: needRefresh,
     rawTimeFormat: "date",
-    // transform: (): Date | undefined => undefined,
+    transform: (): Date | undefined => undefined,
   });
 
   return { setNeedRefresh, date } as const;
