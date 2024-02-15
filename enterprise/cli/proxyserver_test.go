@@ -13,7 +13,7 @@ import (
 	"github.com/coder/coder/v2/pty/ptytest"
 )
 
-func Test_Headers(t *testing.T) {
+func Test_ProxyServer_Headers(t *testing.T) {
 	t.Parallel()
 
 	const (

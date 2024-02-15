@@ -34,6 +34,7 @@ type ProxyOptions struct {
 	DisablePathApps bool
 	DerpDisabled    bool
 	DerpOnly        bool
+	BlockDirect     bool
 
 	// ProxyURL is optional
 	ProxyURL *url.URL
@@ -140,6 +141,7 @@ func NewWorkspaceProxy(t *testing.T, coderdAPI *coderd.API, owner *codersdk.Clie
 		DERPOnly:               options.DerpOnly,
 		DERPServerRelayAddress: accessURL.String(),
 		StatsCollectorOptions:  statsCollectorOptions,
+		BlockDirect:            options.BlockDirect,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
