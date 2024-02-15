@@ -44,9 +44,8 @@ export type UseTimeConfig<
   paused?: boolean;
 
   /**
-   * The type of the "base value" stashed inside state in state on each
-   * re-render. Can be transformed into other values via the config's transform
-   * property.
+   * The type of the "base time value" to use for calculating useTime's state.
+   * Can be transformed into other values via the config's transform property.
    *
    * Defaults to type "dayjs" if not specified.
    */
@@ -81,7 +80,7 @@ export function useTime<
   } = config ?? {};
 
   // Not a fan of the type assertions, but the alternative would involve
-  // jumping through a bunch of hoops. Not worth it for a few lines of code
+  // jumping through a bunch of hoops. Not worth it for so few lines of code
   const createFormattedTimeValue = useEffectEvent(() => {
     type Return = UseTimeReturnValue<TFormat, TTransformed>;
     const newTimeValue = rawTimeFormat === "dayjs" ? dayjs() : new Date();
