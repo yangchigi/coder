@@ -485,6 +485,7 @@ func New(options *Options) *API {
 		func(context.Context) (tailnet.MultiAgentConn, error) {
 			return (*api.TailnetCoordinator.Load()).ServeMultiAgent(uuid.New()), nil
 		},
+		options.DeploymentValues.DERP.Config.BlockDirect.Value(),
 		api.TracerProvider,
 	)
 	if err != nil {

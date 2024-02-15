@@ -228,3 +228,11 @@ func (u *nodeUpdater) setBlockEndpoints(blockEndpoints bool) {
 	u.blockEndpoints = blockEndpoints
 	u.Broadcast()
 }
+
+// getBlockEndpoints returns the value of the most recent setBlockEndpoints
+// call.
+func (u *nodeUpdater) getBlockEndpoints() bool {
+	u.L.Lock()
+	defer u.L.Unlock()
+	return u.blockEndpoints
+}
