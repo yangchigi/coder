@@ -82,7 +82,9 @@ require (
 	github.com/andybalholm/brotli v1.1.0
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/awalterschulze/gographviz v2.0.3+incompatible
+	github.com/aws/aws-sdk-go v1.49.6
 	github.com/aws/smithy-go v1.20.0
+	github.com/benbjohnson/clock v1.3.5
 	github.com/bgentry/speakeasy v0.1.1-0.20220910012023-760eaf8b6816
 	github.com/bramvdbogaerde/go-scp v1.3.0
 	github.com/briandowns/spinner v1.18.1
@@ -123,6 +125,7 @@ require (
 	github.com/gohugoio/hugo v0.122.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang-migrate/migrate/v4 v4.17.0
+	github.com/gomarkdown/markdown v0.0.0-20231222211730-1d6d20845b47
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github/v43 v43.0.1-0.20220414155304-00e42332e405
 	github.com/google/uuid v1.6.0
@@ -130,6 +133,7 @@ require (
 	github.com/hashicorp/go-reap v0.0.0-20170704170343-bf58d8a43e7b
 	github.com/hashicorp/go-version v1.6.0
 	github.com/hashicorp/hc-install v0.6.3
+	github.com/hashicorp/hcl/v2 v2.17.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20211115214459-90acf1ca460f
 	github.com/hashicorp/terraform-json v0.21.0
 	github.com/hashicorp/yamux v0.1.1
@@ -170,6 +174,7 @@ require (
 	github.com/unrolled/secure v1.14.0
 	github.com/valyala/fasthttp v1.52.0
 	github.com/wagslane/go-password-validator v0.3.0
+	github.com/zclconf/go-cty v1.14.1
 	go.mozilla.org/pkcs7 v0.0.0-20200128120323-432b2356ecb1
 	go.nhat.io/otelsql v0.12.0
 	go.opentelemetry.io/otel v1.19.0
@@ -179,6 +184,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.19.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/goleak v1.2.1
+	go.uber.org/mock v0.4.0
 	go4.org/netipx v0.0.0-20230728180743-ad4cb58a6516
 	golang.org/x/crypto v0.19.0
 	golang.org/x/exp v0.0.0-20231219180239-dc181d75b848
@@ -203,15 +209,6 @@ require (
 	storj.io/drpc v0.0.33-0.20230420154621-9716137f6037
 	tailscale.com v1.46.1
 )
-
-require go.uber.org/mock v0.4.0
-
-require (
-	github.com/benbjohnson/clock v1.3.5
-	github.com/gomarkdown/markdown v0.0.0-20231222211730-1d6d20845b47
-)
-
-require github.com/tdewolff/test v1.0.11-0.20240106005702-7de5f7df4739 // indirect
 
 require (
 	cloud.google.com/go/compute v1.23.3 // indirect
@@ -318,7 +315,6 @@ require (
 	github.com/hashicorp/go-hclog v1.5.0 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
-	github.com/hashicorp/hcl/v2 v2.17.0
 	github.com/hashicorp/logutils v1.0.0 // indirect
 	github.com/hashicorp/terraform-plugin-go v0.12.0 // indirect
 	github.com/hashicorp/terraform-plugin-log v0.7.0 // indirect
@@ -386,6 +382,7 @@ require (
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/tcnksm/go-httpstat v0.2.0 // indirect
 	github.com/tdewolff/parse/v2 v2.7.8 // indirect
+	github.com/tdewolff/test v1.0.11-0.20240106005702-7de5f7df4739 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tinylib/msgp v1.1.8 // indirect
@@ -404,7 +401,6 @@ require (
 	github.com/yashtewari/glob-intersection v0.2.0 // indirect
 	github.com/yuin/goldmark v1.6.0 // indirect
 	github.com/yuin/goldmark-emoji v1.0.2 // indirect
-	github.com/zclconf/go-cty v1.14.1
 	github.com/zeebo/errs v1.3.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib v1.19.0 // indirect
