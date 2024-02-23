@@ -65,6 +65,7 @@ func (c *AwsIamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		return nil, xerrors.Errorf("assigning authentication token to url: %w", err)
 	}
 
+	fmt.Println(nURL)
 	// make connection
 	connector, err := pq.NewConnector(nURL)
 	if err != nil {
