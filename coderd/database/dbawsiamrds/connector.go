@@ -103,6 +103,7 @@ func GetAuthenticatedURL(sess *session.Session, dbURL string) (string, error) {
 	if err != nil {
 		return "", xerrors.Errorf("building rds auth token: %w", err)
 	}
+	fmt.Println("token", token)
 	// set token as user password
 	nURL.User = url.UserPassword(nURL.User.Username(), token)
 
