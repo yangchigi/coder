@@ -499,6 +499,9 @@ func ConvertConfig(instrument *promoauth.Factory, entries []codersdk.ExternalAut
 		if entry.Type == string(codersdk.EnhancedExternalAuthProviderAzureDevops) {
 			oauthConfig = &jwtConfig{oc}
 		}
+		if entry.Type == string(codersdk.EnhancedExternalAuthProviderAzureDevopsEntra) {
+			oauthConfig = &jwtConfigEntra{oc}
+		}
 		if entry.Type == string(codersdk.EnhancedExternalAuthProviderJFrog) {
 			oauthConfig = &exchangeWithClientSecret{oc}
 		}
@@ -739,6 +742,11 @@ var staticDefaults = map[codersdk.EnhancedExternalAuthProvider]codersdk.External
 		Regex:       `^(https?://)?dev\.azure\.com(/.*)?$`,
 		Scopes:      []string{"vso.code_write"},
 	},
+	codersdk.EnhancedExternalAuthProviderAzureDevopsEntra: {
+		DisplayName: "Azure DevOps (Entra)",
+		DisplayIcon: "/icon/azure-devops.svg",
+		Regex:       `^(https?://)?dev\.azure\.com(/.*)?$`,
+	},
 	codersdk.EnhancedExternalAuthProviderBitBucketCloud: {
 		AuthURL:     "https://bitbucket.org/site/oauth2/authorize",
 		TokenURL:    "https://bitbucket.org/site/oauth2/access_token",
@@ -807,6 +815,25 @@ func (c *jwtConfig) Exchange(ctx context.Context, code string, opts ...oauth2.Au
 			oauth2.SetAuthURLParam("assertion", code),
 			oauth2.SetAuthURLParam("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
 			oauth2.SetAuthURLParam("code", ""),
+		)...,
+	)
+}
+
+// When authenticating via Entra ID ADO only supports v1 tokens that requires the 'resource' rather than scopes
+type jwtConfigEntra struct {
+	*oauth2.Config
+}
+
+func (c *jwtConfigEntra) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
+	return c.Config.AuthCodeURL(state, append(opts, oauth2.SetAuthURLParam("resource", "499b84ac-1321-427f-aa17-267ca6975798"))...)
+}
+
+func (c *jwtConfigEntra) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return c.Config.Exchange(ctx, code,
+		append(opts,
+			oauth2.SetAuthURLParam("client_id", c.ClientID),
+			oauth2.SetAuthURLParam("resource", "499b84ac-1321-427f-aa17-267ca6975798"),
+			oauth2.SetAuthURLParam("client_secret", c.ClientSecret),
 		)...,
 	)
 }

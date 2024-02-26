@@ -26,6 +26,7 @@ func (e EnhancedExternalAuthProvider) Git() bool {
 		EnhancedExternalAuthProviderBitBucketServer,
 		EnhancedExternalAuthProviderAzureDevops,
 		EnhancedExternalAuthProviderGitea:
+		EnhancedExternalAuthProviderAzureDevopsEntra:
 		return true
 	default:
 		return false
@@ -33,9 +34,10 @@ func (e EnhancedExternalAuthProvider) Git() bool {
 }
 
 const (
-	EnhancedExternalAuthProviderAzureDevops EnhancedExternalAuthProvider = "azure-devops"
-	EnhancedExternalAuthProviderGitHub      EnhancedExternalAuthProvider = "github"
-	EnhancedExternalAuthProviderGitLab      EnhancedExternalAuthProvider = "gitlab"
+	EnhancedExternalAuthProviderAzureDevops      EnhancedExternalAuthProvider = "azure-devops"
+	EnhancedExternalAuthProviderAzureDevopsEntra EnhancedExternalAuthProvider = "azure-devops-entra"
+	EnhancedExternalAuthProviderGitHub           EnhancedExternalAuthProvider = "github"
+	EnhancedExternalAuthProviderGitLab           EnhancedExternalAuthProvider = "gitlab"
 	// EnhancedExternalAuthProviderBitBucketCloud is the Bitbucket Cloud provider.
 	// Not to be confused with the self-hosted 'EnhancedExternalAuthProviderBitBucketServer'
 	EnhancedExternalAuthProviderBitBucketCloud  EnhancedExternalAuthProvider = "bitbucket-cloud"
