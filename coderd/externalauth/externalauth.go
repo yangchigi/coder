@@ -572,6 +572,9 @@ func applyDefaultsToConfig(config *codersdk.ExternalAuthConfig) {
 	case codersdk.EnhancedExternalAuthProviderGitea:
 		copyDefaultSettings(config, giteaDefaults(config))
 		return
+	case codersdk.EnhancedExternalAuthProviderAzureDevopsEntra:
+		copyDefaultSettings(config, azureDevopsEntraDefaults(config))
+		return
 	default:
 		// No defaults for this type. We still want to run this apply with
 		// an empty set of defaults.
@@ -733,6 +736,41 @@ func giteaDefaults(config *codersdk.ExternalAuthConfig) codersdk.ExternalAuthCon
 	return defaults
 }
 
+func azureDevopsEntraDefaults(config *codersdk.ExternalAuthConfig) codersdk.ExternalAuthConfig {
+	defaults := codersdk.ExternalAuthConfig{
+		DisplayName: "Azure DevOps (Entra)",
+		DisplayIcon: "/icon/azure-devops.svg",
+		Regex:       `^(https?://)?dev\.azure\.com(/.*)?$`,
+	}
+	// The tenant ID is required for urls and is in the auth url.
+	if config.AuthURL == "" {
+		// No auth url, means we cannot guess the urls.
+		return defaults
+	}
+
+	auth, err := url.Parse(config.AuthURL)
+	if err != nil {
+		// We need a valid URL to continue with.
+		return defaults
+	}
+
+	// Only extract the tenant ID if the path is what we expect.
+	// The path should be /{tenantId}/oauth2/authorize.
+	parts := strings.Split(auth.Path, "/")
+	if len(parts) < 4 && parts[2] != "oauth2" || parts[3] != "authorize" {
+		// Not sure what this path is, abort.
+		return defaults
+	}
+	tenantID := parts[1]
+
+	tokenURL := auth.ResolveReference(&url.URL{Path: fmt.Sprintf("/%s/oauth2/token", tenantID)})
+	defaults.TokenURL = tokenURL.String()
+
+	// TODO: Discover a validate url for Azure DevOps.
+
+	return defaults
+}
+
 var staticDefaults = map[codersdk.EnhancedExternalAuthProvider]codersdk.ExternalAuthConfig{
 	codersdk.EnhancedExternalAuthProviderAzureDevops: {
 		AuthURL:     "https://app.vssps.visualstudio.com/oauth2/authorize",
@@ -741,11 +779,6 @@ var staticDefaults = map[codersdk.EnhancedExternalAuthProvider]codersdk.External
 		DisplayIcon: "/icon/azure-devops.svg",
 		Regex:       `^(https?://)?dev\.azure\.com(/.*)?$`,
 		Scopes:      []string{"vso.code_write"},
-	},
-	codersdk.EnhancedExternalAuthProviderAzureDevopsEntra: {
-		DisplayName: "Azure DevOps (Entra)",
-		DisplayIcon: "/icon/azure-devops.svg",
-		Regex:       `^(https?://)?dev\.azure\.com(/.*)?$`,
 	},
 	codersdk.EnhancedExternalAuthProviderBitBucketCloud: {
 		AuthURL:     "https://bitbucket.org/site/oauth2/authorize",
