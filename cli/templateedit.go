@@ -23,6 +23,7 @@ func (r *RootCmd) templateEdit() *clibase.Cmd {
 		description                    string
 		icon                           string
 		defaultTTL                     time.Duration
+		activityBump                   time.Duration
 		maxTTL                         time.Duration
 		autostopRequirementDaysOfWeek  []string
 		autostopRequirementWeeks       int64
@@ -78,7 +79,7 @@ func (r *RootCmd) templateEdit() *clibase.Cmd {
 				}
 			}
 
-			organization, err := CurrentOrganization(inv, client)
+			organization, err := CurrentOrganization(r, inv, client)
 			if err != nil {
 				return xerrors.Errorf("get current organization: %w", err)
 			}
@@ -106,6 +107,10 @@ func (r *RootCmd) templateEdit() *clibase.Cmd {
 
 			if !userSetOption(inv, "default-ttl") {
 				defaultTTL = time.Duration(template.DefaultTTLMillis) * time.Millisecond
+			}
+
+			if !userSetOption(inv, "activity-bump") {
+				activityBump = time.Duration(template.ActivityBumpMillis) * time.Millisecond
 			}
 
 			if !userSetOption(inv, "allow-user-autostop") {
@@ -168,12 +173,13 @@ func (r *RootCmd) templateEdit() *clibase.Cmd {
 			}
 
 			req := codersdk.UpdateTemplateMeta{
-				Name:             name,
-				DisplayName:      displayName,
-				Description:      description,
-				Icon:             icon,
-				DefaultTTLMillis: defaultTTL.Milliseconds(),
-				MaxTTLMillis:     maxTTL.Milliseconds(),
+				Name:               name,
+				DisplayName:        displayName,
+				Description:        description,
+				Icon:               icon,
+				DefaultTTLMillis:   defaultTTL.Milliseconds(),
+				ActivityBumpMillis: activityBump.Milliseconds(),
+				MaxTTLMillis:       maxTTL.Milliseconds(),
 				AutostopRequirement: &codersdk.TemplateAutostopRequirement{
 					DaysOfWeek: autostopRequirementDaysOfWeek,
 					Weeks:      autostopRequirementWeeks,
@@ -232,6 +238,11 @@ func (r *RootCmd) templateEdit() *clibase.Cmd {
 			Flag:        "default-ttl",
 			Description: "Edit the template default time before shutdown - workspaces created from this template default to this value. Maps to \"Default autostop\" in the UI.",
 			Value:       clibase.DurationOf(&defaultTTL),
+		},
+		{
+			Flag:        "activity-bump",
+			Description: "Edit the template activity bump - workspaces created from this template will have their shutdown time bumped by this value when activity is detected. Maps to \"Activity bump\" in the UI.",
+			Value:       clibase.DurationOf(&activityBump),
 		},
 		{
 			Flag:        "max-ttl",

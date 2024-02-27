@@ -26,10 +26,11 @@ const (
 
 // Organization is the JSON representation of a Coder organization.
 type Organization struct {
-	ID        uuid.UUID `json:"id" validate:"required" format:"uuid"`
-	Name      string    `json:"name" validate:"required"`
-	CreatedAt time.Time `json:"created_at" validate:"required" format:"date-time"`
-	UpdatedAt time.Time `json:"updated_at" validate:"required" format:"date-time"`
+	ID        uuid.UUID `table:"id" json:"id" validate:"required" format:"uuid"`
+	Name      string    `table:"name,default_sort" json:"name" validate:"required"`
+	CreatedAt time.Time `table:"created_at" json:"created_at" validate:"required" format:"date-time"`
+	UpdatedAt time.Time `table:"updated_at" json:"updated_at" validate:"required" format:"date-time"`
+	IsDefault bool      `table:"default" json:"is_default" validate:"required"`
 }
 
 type OrganizationMember struct {
@@ -84,6 +85,10 @@ type CreateTemplateRequest struct {
 	// DefaultTTLMillis allows optionally specifying the default TTL
 	// for all workspaces created from this template.
 	DefaultTTLMillis *int64 `json:"default_ttl_ms,omitempty"`
+	// ActivityBumpMillis allows optionally specifying the activity bump
+	// duration for all workspaces created from this template. Defaults to 1h
+	// but can be set to 0 to disable activity bumping.
+	ActivityBumpMillis *int64 `json:"activity_bump_ms,omitempty"`
 	// TODO(@dean): remove max_ttl once autostop_requirement is matured
 	// Only one of MaxTTLMillis or AutostopRequirement can be specified.
 	MaxTTLMillis *int64 `json:"max_ttl_ms,omitempty"`
@@ -148,8 +153,8 @@ type CreateWorkspaceRequest struct {
 	AutomaticUpdates    AutomaticUpdates          `json:"automatic_updates,omitempty"`
 }
 
-func (c *Client) Organization(ctx context.Context, id uuid.UUID) (Organization, error) {
-	res, err := c.Request(ctx, http.MethodGet, fmt.Sprintf("/api/v2/organizations/%s", id.String()), nil)
+func (c *Client) OrganizationByName(ctx context.Context, name string) (Organization, error) {
+	res, err := c.Request(ctx, http.MethodGet, fmt.Sprintf("/api/v2/organizations/%s", name), nil)
 	if err != nil {
 		return Organization{}, xerrors.Errorf("execute request: %w", err)
 	}
@@ -161,6 +166,12 @@ func (c *Client) Organization(ctx context.Context, id uuid.UUID) (Organization, 
 
 	var organization Organization
 	return organization, json.NewDecoder(res.Body).Decode(&organization)
+}
+
+func (c *Client) Organization(ctx context.Context, id uuid.UUID) (Organization, error) {
+	// OrganizationByName uses the exact same endpoint. It accepts a name or uuid.
+	// We just provide this function for type safety.
+	return c.OrganizationByName(ctx, id.String())
 }
 
 // ProvisionerDaemons returns provisioner daemons available.

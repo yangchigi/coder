@@ -88,6 +88,8 @@ var auditableResourcesTypes = map[any]map[string]Action{
 		"time_til_dormant_autodelete":       ActionTrack,
 		"require_active_version":            ActionTrack,
 		"deprecated":                        ActionTrack,
+		"max_port_sharing_level":            ActionTrack,
+		"activity_bump":                     ActionTrack,
 	},
 	&database.TemplateVersion{}: {
 		"id":                      ActionTrack,
@@ -216,6 +218,23 @@ var auditableResourcesTypes = map[any]map[string]Action{
 		"derp_only":           ActionTrack,
 		"region_id":           ActionTrack,
 		"version":             ActionTrack,
+	},
+	&database.OAuth2ProviderApp{}: {
+		"id":           ActionIgnore,
+		"created_at":   ActionIgnore,
+		"updated_at":   ActionIgnore,
+		"name":         ActionTrack,
+		"icon":         ActionTrack,
+		"callback_url": ActionTrack,
+	},
+	&database.OAuth2ProviderAppSecret{}: {
+		"id":             ActionIgnore,
+		"created_at":     ActionIgnore,
+		"last_used_at":   ActionIgnore,
+		"hashed_secret":  ActionIgnore,
+		"display_secret": ActionIgnore,
+		"app_id":         ActionIgnore,
+		"secret_prefix":  ActionIgnore,
 	},
 }
 
