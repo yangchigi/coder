@@ -273,6 +273,18 @@ func (c *Client) DialWorkspaceAgent(dialCtx context.Context, agentID uuid.UUID, 
 		options.BlockEndpoints = true
 	}
 
+	urls := []string{}
+	for _, d := range connInfo.DERPMap.Regions {
+		for _, n := range d.Nodes {
+			u := n.HostName
+			if u == "" {
+				u = n.IPv4
+			}
+			urls = append(urls, u)
+		}
+	}
+	fmt.Println("=== CLIENT DERP MAP URLS: " + strings.Join(urls, ", "))
+
 	ip := tailnet.IP()
 	var header http.Header
 	if headerTransport, ok := c.HTTPClient.Transport.(*HeaderTransport); ok {

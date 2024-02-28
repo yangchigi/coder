@@ -981,6 +981,17 @@ func (a *agent) createOrUpdateNetwork(manifestOK <-chan struct{}, networkOK chan
 		if network == nil {
 			// use the graceful context here, because creating the tailnet is not itself tied to the
 			// agent API.
+			urls := []string{}
+			for _, d := range manifest.DERPMap.Regions {
+				for _, n := range d.Nodes {
+					u := n.HostName
+					if u == "" {
+						u = n.IPv4
+					}
+					urls = append(urls, u)
+				}
+			}
+			fmt.Println("=== AGENT DERP MAP URLS: " + strings.Join(urls, ", "))
 			network, err = a.createTailnet(a.gracefulCtx, manifest.AgentID, manifest.DERPMap, manifest.DERPForceWebSockets, manifest.DisableDirectConnections)
 			if err != nil {
 				return xerrors.Errorf("create tailnet: %w", err)
@@ -1006,6 +1017,17 @@ func (a *agent) createOrUpdateNetwork(manifestOK <-chan struct{}, networkOK chan
 			// Update the DERP map, force WebSocket setting and allow/disallow
 			// direct connections.
 			network.SetDERPMap(manifest.DERPMap)
+			urls := []string{}
+			for _, d := range manifest.DERPMap.Regions {
+				for _, n := range d.Nodes {
+					u := n.HostName
+					if u == "" {
+						u = n.IPv4
+					}
+					urls = append(urls, u)
+				}
+			}
+			fmt.Println("=== AGENT DERP MAP URLS: " + strings.Join(urls, ", "))
 			network.SetDERPForceWebSockets(manifest.DERPForceWebSockets)
 			network.SetBlockEndpoints(manifest.DisableDirectConnections)
 		}
