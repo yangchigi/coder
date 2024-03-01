@@ -36,6 +36,12 @@ func (api *API) postWorkspaceAgentPortShare(rw http.ResponseWriter, r *http.Requ
 		})
 		return
 	}
+	if !req.Protocol.ValidPortProtocol() {
+		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+			Message: "Port protocol not allowed.",
+		})
+		return
+	}
 
 	template, err := api.Database.GetTemplateByID(ctx, workspace.TemplateID)
 	if err != nil {
@@ -76,6 +82,7 @@ func (api *API) postWorkspaceAgentPortShare(rw http.ResponseWriter, r *http.Requ
 		AgentName:   req.AgentName,
 		Port:        req.Port,
 		ShareLevel:  database.AppSharingLevel(req.ShareLevel),
+		Protocol:    database.PortShareProtocol(req.Protocol),
 	})
 	if err != nil {
 		httpapi.InternalServerError(rw, err)
@@ -169,5 +176,6 @@ func convertPortShare(share database.WorkspaceAgentPortShare) codersdk.Workspace
 		AgentName:   share.AgentName,
 		Port:        share.Port,
 		ShareLevel:  codersdk.WorkspaceAgentPortShareLevel(share.ShareLevel),
+		Protocol:    codersdk.WorkspaceAgentPortShareProtocol(share.Protocol),
 	}
 }
